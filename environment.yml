@@ -1,36 +1,17 @@
-name: lockfiles-check
-
-on:
-  pull_request:
-    paths:
-      - environment.yml
-      - .github/workflows/lockfiles-check.yml
-      - .github/workflows/lockfiles-update.yml
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          micromamba-version: "latest"
-          cache-downloads: true
-
-      - name: Install conda-lock
-        run: micromamba install -y -n base -c conda-forge conda-lock
-
-      - name: Generate lockfiles
-        run: |
-          conda-lock -f environment.yml \
-            -p linux-64 -p win-64 -p osx-64 -p osx-arm64 \
-            --kind explicit
-
-      - name: Fail if lockfiles changed
-        run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo "Lockfiles are out of date. Run the update workflow (merge to main) or regenerate locally."
-            git diff --name-only
-            exit 1
-          fi
+name: ai-research-env
+channels:
+  - conda-forge
+channel_priority: strict
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - pandas
+  - scipy
+  - scikit-learn
+  - pytorch
+  - torchvision
+  - torchaudio
+  - tensorflow
+  - jupyterlab
+  - ipykernel
