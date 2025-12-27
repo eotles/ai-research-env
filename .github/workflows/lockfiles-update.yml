@@ -19,7 +19,6 @@ jobs:
 
       - uses: mamba-org/setup-micromamba@v2
         with:
-          micromamba-version: "latest"
           cache-downloads: true
 
       - name: Install conda-lock
@@ -27,7 +26,7 @@ jobs:
 
       - name: Generate lockfiles
         run: |
-          conda-lock -f environment.yml \
+          micromamba run -n base conda-lock -f environment.yml \
             -p linux-64 -p win-64 -p osx-64 -p osx-arm64 \
             --kind explicit
 
