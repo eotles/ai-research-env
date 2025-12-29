@@ -1,18 +1,26 @@
-name: ai-research-env
+name: ds
 channels:
+  - pytorch
   - conda-forge
+  - defaults
 channel_priority: strict
 dependencies:
   - python=3.11
   - pip
+
   - numpy
   - pandas
   - scipy
   - scikit-learn
+
+  # pytorch stack (from pytorch channel, consistent across platforms)
   - pytorch
   - torchvision
   - torchaudio
-  - tensorflow
+  - cpuonly
+
+  # tensorflow (pin to a version that is available across channels/platforms)
+  - tensorflow=2.18.*
+
   - jupyterlab
   - ipykernel
-
