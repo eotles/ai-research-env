@@ -1,4 +1,4 @@
-name: ds
+name: ai-research-env
 channels:
   - pytorch
   - conda-forge
