@@ -8,10 +8,46 @@ dependencies:
   - python=3.11
   - pip
 
+  # core scientific python
   - numpy
   - pandas
   - scipy
   - scikit-learn
+
+  # visualization and notebooks
+  - matplotlib
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+
+  # quality-of-life (progress, logging, utilities)
+  - tqdm
+  - rich
+  - pyyaml
+  - pydantic
+  - python-dotenv
+  - requests
+
+  # data I/O and local analytics
+  - pyarrow
+  - duckdb
+  - polars
+  - h5py
+
+  # performance
+  - numba
+
+  # dev tooling
+  - pytest
+  - pytest-cov
+  - ruff
+  - mypy
+  - pre-commit
+  - typer
+  - joblib
+
+  # experiment tracking
+  - mlflow
 
   # pytorch stack (from pytorch channel, consistent across platforms)
   - pytorch
