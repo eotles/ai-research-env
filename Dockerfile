@@ -11,6 +11,7 @@ RUN micromamba create -y -n ai-research-env -f /tmp/conda-linux-64.lock && \
 
 # Ensure the env is active for CMD/ENTRYPOINT commands
 ENV MAMBA_DOCKERFILE_ACTIVATE=1
+ENV ENV_NAME=ai-research-env
 
 EXPOSE 8888
 
