@@ -23,9 +23,11 @@ jobs:
 
       - name: Generate lockfiles
         run: |
+          mkdir -p locks
           micromamba run -n base conda-lock -f environment.yml \
             -p linux-64 -p win-64 -p osx-64 -p osx-arm64 \
             --kind explicit
+            --filename-template "locks/conda-{platform}.lock"
 
       - name: Fail if lockfiles changed
         run: |
