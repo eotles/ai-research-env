@@ -47,7 +47,7 @@ dependencies:
   - joblib
 
   # experiment tracking
-  - mlflow
+  # - mlflow
 
   # pytorch stack (from pytorch channel, consistent across platforms)
   - pytorch
