@@ -46,6 +46,10 @@ dependencies:
   - typer
   - joblib
 
+  # mcp server hosting
+  - pip:
+    - mcp[cli]
+
   # experiment tracking
   # - mlflow
 

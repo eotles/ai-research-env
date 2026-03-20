@@ -20,4 +20,5 @@ ENV ENV_NAME=ai-research-env
 ENV MAMBA_DOCKERFILE_ACTIVATE=1
 
 EXPOSE 8888
+EXPOSE 8000
 CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/work"]
