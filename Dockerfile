@@ -15,6 +15,9 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     micromamba create -y -n ai-research-env -f "$LOCK" && \
     micromamba clean -a -y
 
+# Install pip-only packages not captured in the conda explicit lockfile
+RUN micromamba run -n ai-research-env pip install "mcp[cli]"
+
 # Make micromamba activate the right env on container start
 ENV ENV_NAME=ai-research-env
 ENV MAMBA_DOCKERFILE_ACTIVATE=1
