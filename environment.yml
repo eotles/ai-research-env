@@ -46,9 +46,7 @@ dependencies:
   - typer
   - joblib
 
-  # mcp server hosting
-  - pip:
-    - mcp[cli]
+  # pip-only / Docker-only packages: see requirements-docker.txt
 
   # experiment tracking
   # - mlflow

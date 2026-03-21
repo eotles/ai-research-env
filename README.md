@@ -24,6 +24,11 @@ The lockfiles are what you install from, they pin exact builds per platform.
   - Automation that regenerates lockfiles when `environment.yml` changes.
   - Automation that builds/pushes a Docker image to GHCR when Linux lockfiles change.
 
+- `requirements-docker.txt`
+  - Pip-only packages installed exclusively inside the Docker image.
+  - Not part of the conda lockfiles; not installed in native environments.
+  - Add pip-only dependencies here instead of in `environment.yml`.
+
 - `Dockerfile`
   - Builds a Linux container environment from the Linux lockfiles.
 
@@ -167,11 +172,19 @@ micromamba activate ai-research-env
 jupyter lab --ip=0.0.0.0 --no-browser
 ```
 
-Updating dependencies
-1. Edit ```environment.yml```.
-2. Commit and push to ```main```.
-GitHub Actions will regenerate the lockfiles and commit them back.
-A separate workflow builds and publishes the Docker image when the Linux lockfiles change.
+## Updating dependencies
+
+**Conda packages** (installed in both native and Docker environments):
+1. Edit `environment.yml`.
+2. Commit and push to `main`.
+   GitHub Actions will regenerate the lockfiles and commit them back.
+   A separate workflow then builds and publishes the Docker image.
+
+**Docker-only pip packages** (not installed in native environments):
+1. Edit `requirements-docker.txt`.
+2. Commit and push to `main`.
+   The Docker image workflow will rebuild and publish the updated image.
+   No lockfile regeneration is triggered.
 
 Notes
 - The Docker image is the easiest way to get a consistent environment on any machine with Docker.

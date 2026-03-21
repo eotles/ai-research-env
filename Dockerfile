@@ -4,6 +4,7 @@ WORKDIR /work
 
 COPY locks/conda-linux-64.lock /tmp/conda-linux-64.lock
 COPY locks/conda-linux-aarch64.lock /tmp/conda-linux-aarch64.lock
+COPY requirements-docker.txt /tmp/requirements-docker.txt
 
 ARG TARGETARCH
 
@@ -16,7 +17,7 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     micromamba clean -a -y
 
 # Install pip-only packages not captured in the conda explicit lockfile
-RUN micromamba run -n ai-research-env pip install "mcp[cli]"
+RUN micromamba run -n ai-research-env pip install -r /tmp/requirements-docker.txt
 
 # Make micromamba activate the right env on container start
 ENV ENV_NAME=ai-research-env

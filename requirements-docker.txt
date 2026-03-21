@@ -1,0 +1,5 @@
+# Pip-only packages installed ONLY inside the Docker image.
+# Not part of the conda lockfiles; not installed in native environments.
+# Add any pip-only dependency here (standard pip requirement syntax).
+
+mcp[cli]
