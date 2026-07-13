@@ -24,54 +24,60 @@ jobs:
       - name: Install conda-lock
         run: micromamba install -y -n base -c conda-forge conda-lock
 
-      - name: Generate lockfiles
+      - name: Show solver versions
         shell: bash
         run: |
-          set -uo pipefail
+          echo "MAMBA_EXE=${MAMBA_EXE}"
+          "${MAMBA_EXE}" --version
+          micromamba run -n base conda-lock --version
+
+      - name: Direct solve without Java
+        continue-on-error: true
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          sed '/^[[:space:]]*- openjdk=25[[:space:]]*$/d' \
+            environment.yml > /tmp/environment-no-java.yml
+
+          "${MAMBA_EXE}" create \
+            --dry-run \
+            --yes \
+            --strict-channel-priority \
+            --prefix /tmp/test-no-java \
+            --file /tmp/environment-no-java.yml \
+            -vv
+
+      - name: Direct solve with Java
+        continue-on-error: true
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          "${MAMBA_EXE}" create \
+            --dry-run \
+            --yes \
+            --strict-channel-priority \
+            --prefix /tmp/test-with-java \
+            --file environment.yml \
+            -vv
+
+      - name: Conda-lock linux-64 using Micromamba
+        continue-on-error: true
+        timeout-minutes: 6
+        shell: bash
+        env:
+          CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
+        run: |
           mkdir -p locks
-      
-          platforms=(
-            linux-64
-            linux-aarch64
-            win-64
-            osx-64
-            osx-arm64
-          )
-      
-          failed=0
-      
-          for platform in "${platforms[@]}"; do
-            echo "::group::Generating lockfile for ${platform}"
-            echo "Started ${platform} at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-      
-            start_time=$(date +%s)
-      
-            timeout 5m micromamba run -n base conda-lock \
-              -f environment.yml \
-              -p "${platform}" \
-              --kind explicit \
-              --filename-template "locks/conda-{platform}.lock"
-      
-            status=$?
-            end_time=$(date +%s)
-            elapsed=$((end_time - start_time))
-      
-            echo "Finished ${platform} after $((elapsed / 60))m $((elapsed % 60))s"
-      
-            if [[ $status -eq 124 ]]; then
-              echo "::error::${platform} timed out after 30 minutes"
-              failed=1
-            elif [[ $status -ne 0 ]]; then
-              echo "::error::${platform} failed with exit code ${status}"
-              failed=1
-            else
-              echo "${platform} completed successfully"
-            fi
-      
-            echo "::endgroup::"
-          done
-      
-          exit "$failed"
+
+          micromamba run -n base conda-lock \
+            --conda "${MAMBA_EXE}" \
+            --without-cuda \
+            --log-level DEBUG \
+            --preserve-temp-dirs \
+            --file environment.yml \
+            --platform linux-64 \
+            --kind explicit \
+            --filename-template "locks/conda-{platform}.lock"
 
       - name: Commit and push if changed
         run: |
