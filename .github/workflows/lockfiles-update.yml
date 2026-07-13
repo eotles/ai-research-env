@@ -25,12 +25,53 @@ jobs:
         run: micromamba install -y -n base -c conda-forge conda-lock
 
       - name: Generate lockfiles
+        shell: bash
         run: |
+          set -uo pipefail
           mkdir -p locks
-          micromamba run -n base conda-lock -f environment.yml \
-            -p linux-64 -p linux-aarch64 -p win-64 -p osx-64 -p osx-arm64 \
-            --kind explicit \
-            --filename-template "locks/conda-{platform}.lock"
+      
+          platforms=(
+            linux-64
+            linux-aarch64
+            win-64
+            osx-64
+            osx-arm64
+          )
+      
+          failed=0
+      
+          for platform in "${platforms[@]}"; do
+            echo "::group::Generating lockfile for ${platform}"
+            echo "Started ${platform} at $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+      
+            start_time=$(date +%s)
+      
+            timeout 30m micromamba run -n base conda-lock \
+              -f environment.yml \
+              -p "${platform}" \
+              --kind explicit \
+              --filename-template "locks/conda-{platform}.lock"
+      
+            status=$?
+            end_time=$(date +%s)
+            elapsed=$((end_time - start_time))
+      
+            echo "Finished ${platform} after $((elapsed / 60))m $((elapsed % 60))s"
+      
+            if [[ $status -eq 124 ]]; then
+              echo "::error::${platform} timed out after 30 minutes"
+              failed=1
+            elif [[ $status -ne 0 ]]; then
+              echo "::error::${platform} failed with exit code ${status}"
+              failed=1
+            else
+              echo "${platform} completed successfully"
+            fi
+      
+            echo "::endgroup::"
+          done
+      
+          exit "$failed"
 
       - name: Commit and push if changed
         run: |
