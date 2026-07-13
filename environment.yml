@@ -9,7 +9,7 @@ dependencies:
   - openjdk=25
   - pip
 
-  # core scientific python packages
+  # core scientific python
   - numpy
   - pandas
   - scipy
