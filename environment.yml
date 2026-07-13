@@ -6,6 +6,7 @@ channels:
 channel_priority: strict
 dependencies:
   - python=3.11
+  - openjdk=25
   - pip
 
   # core scientific python
