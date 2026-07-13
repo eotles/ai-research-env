@@ -2,7 +2,7 @@ name: lockfiles-update
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
     paths:
       - environment.yml
 
@@ -12,6 +12,7 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -22,69 +23,92 @@ jobs:
           cache-downloads: true
 
       - name: Install conda-lock
-        run: micromamba install -y -n base -c conda-forge conda-lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          micromamba install -y -n base -c conda-forge "conda-lock=3.*"
 
       - name: Show solver versions
         shell: bash
         run: |
+          set -Eeuo pipefail
+
           echo "MAMBA_EXE=${MAMBA_EXE}"
           "${MAMBA_EXE}" --version
           micromamba run -n base conda-lock --version
 
-      - name: Direct solve without Java
-        continue-on-error: true
-        timeout-minutes: 6
-        shell: bash
-        run: |
-          sed '/^[[:space:]]*- openjdk=25[[:space:]]*$/d' \
-            environment.yml > /tmp/environment-no-java.yml
-
-          "${MAMBA_EXE}" create \
-            --dry-run \
-            --yes \
-            --strict-channel-priority \
-            --prefix /tmp/test-no-java \
-            --file /tmp/environment-no-java.yml \
-            -vv
-
-      - name: Direct solve with Java
-        continue-on-error: true
-        timeout-minutes: 6
-        shell: bash
-        run: |
-          "${MAMBA_EXE}" create \
-            --dry-run \
-            --yes \
-            --strict-channel-priority \
-            --prefix /tmp/test-with-java \
-            --file environment.yml \
-            -vv
-
-      - name: Conda-lock linux-64 using Micromamba
-        continue-on-error: true
-        timeout-minutes: 6
+      - name: Generate lockfiles
         shell: bash
         env:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
         run: |
+          set -Eeuo pipefail
+
           mkdir -p locks
 
-          micromamba run -n base conda-lock \
-            --conda "${MAMBA_EXE}" \
-            --without-cuda \
-            --log-level DEBUG \
-            --preserve-temp-dirs \
-            --file environment.yml \
-            --platform linux-64 \
-            --kind explicit \
-            --filename-template "locks/conda-{platform}.lock"
+          platforms=(
+            linux-64
+            linux-aarch64
+            osx-64
+            osx-arm64
+            win-64
+          )
+
+          failed=0
+
+          for platform in "${platforms[@]}"; do
+            echo "::group::Generating lockfile for ${platform}"
+
+            start=$(date +%s)
+
+            if timeout 10m \
+              micromamba run -n base conda-lock \
+                --conda "${MAMBA_EXE}" \
+                --without-cuda \
+                --log-level INFO \
+                --file environment.yml \
+                --platform "${platform}" \
+                --kind explicit \
+                --filename-template "locks/conda-{platform}.lock"
+            then
+              status=0
+            else
+              status=$?
+            fi
+
+            end=$(date +%s)
+            elapsed=$((end-start))
+
+            echo "Elapsed: ${elapsed}s"
+
+            if [[ "${status}" -eq 0 ]]; then
+              echo "✓ ${platform}"
+            elif [[ "${status}" -eq 124 ]]; then
+              echo "::error::${platform} timed out."
+              failed=1
+            else
+              echo "::error::${platform} failed with exit code ${status}."
+              failed=1
+            fi
+
+            echo "::endgroup::"
+          done
+
+          if [[ "${failed}" -ne 0 ]]; then
+            exit 1
+          fi
 
       - name: Commit and push if changed
+        shell: bash
         run: |
+          set -Eeuo pipefail
+
           if [[ -n "$(git status --porcelain)" ]]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -A
+
+            git add locks/
+
             git commit -m "Update conda lockfiles"
             git push
           else
