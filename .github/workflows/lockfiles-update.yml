@@ -46,7 +46,7 @@ jobs:
       
             start_time=$(date +%s)
       
-            timeout 30m micromamba run -n base conda-lock \
+            timeout 5m micromamba run -n base conda-lock \
               -f environment.yml \
               -p "${platform}" \
               --kind explicit \
