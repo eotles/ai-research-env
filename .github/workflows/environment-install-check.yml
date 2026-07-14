@@ -1,27 +1,46 @@
 name: environment-install-check
 
 on:
+  # Validate proposed environment changes before merge.
+  pull_request:
+    paths:
+      - environment.yml
+      - scripts/smoke_test.py
+      - .github/workflows/environment-install-check.yml
+
+  # Validate the complete installed environment after relevant changes land.
+  push:
+    branches:
+      - main
+    paths:
+      - environment.yml
+      - scripts/smoke_test.py
+      - .github/workflows/environment-install-check.yml
+
+  # Periodically verify that the complete environment can still be freshly
+  # locked, installed, and executed.
+  schedule:
+    - cron: "43 11 * * 1"
+
+  # Allow an explicit end-to-end validation run.
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: environment-install-check
-  cancel-in-progress: false
+  group: environment-install-check-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  install-and-test:
-    name: Install and test complete environment
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-
-    env:
-      TEST_ENV_NAME: ai-research-env-test
+  generate-lock:
+    name: Generate unified lock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure runtime paths
         shell: bash
@@ -32,7 +51,7 @@ jobs:
             >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           cache-downloads: true
 
@@ -69,19 +88,82 @@ jobs:
             --without-cuda \
             --log-level INFO \
             --file environment.yml \
-            --platform linux-64 \
             --kind lock \
             --lockfile "${CANDIDATE_LOCK}"
 
           test -s "${CANDIDATE_LOCK}"
 
       - name: Upload candidate unified lock
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: candidate-unified-conda-lock-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-conda-lock.yml
           if-no-files-found: error
           retention-days: 14
+
+  install-and-test:
+    name: ${{ matrix.platform }}
+    needs:
+      - generate-lock
+
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-64
+            runner: ubuntu-24.04
+
+          - platform: linux-aarch64
+            runner: ubuntu-24.04-arm
+
+          - platform: osx-64
+            runner: macos-15-intel
+
+          - platform: osx-arm64
+            runner: macos-15
+
+          - platform: win-64
+            runner: windows-2025
+
+    env:
+      TEST_ENV_NAME: ai-research-env-test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Download candidate unified lock
+        uses: actions/download-artifact@v8
+        with:
+          name: candidate-unified-conda-lock-${{ github.run_id }}
+          path: ${{ runner.temp }}/candidate-lock
+
+      - name: Configure runtime paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "CANDIDATE_LOCK=${RUNNER_TEMP}/candidate-lock/candidate-conda-lock.yml" \
+            >> "${GITHUB_ENV}"
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          cache-downloads: true
+
+      - name: Install conda-lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          micromamba install \
+            -y \
+            -n base \
+            -c conda-forge \
+            "conda-lock=3.*"
 
       - name: Install complete locked environment
         shell: bash
@@ -101,13 +183,11 @@ jobs:
           "${MAMBA_EXE}" run \
             -n "${TEST_ENV_NAME}" \
             python --version
-      
+
       - name: Validate installed dependency consistency
         shell: bash
         run: |
           set -Eeuo pipefail
-
-          echo "Checking installed Python package metadata for dependency conflicts..."
 
           "${MAMBA_EXE}" run \
             -n "${TEST_ENV_NAME}" \
@@ -122,16 +202,15 @@ jobs:
             -n "${TEST_ENV_NAME}" \
             python scripts/smoke_test.py
 
-      - name: Report success
+      - name: Report platform success
         shell: bash
         run: |
           {
-            echo "## Complete environment installation succeeded"
+            echo "## ${{
+              matrix.platform
+            }} environment validation succeeded"
             echo
-            echo "- Candidate lock format: unified conda-lock"
-            echo "- Platform: linux-64"
-            echo "- Dependency consistency check: passed"
+            echo "- Unified lock installation: passed"
+            echo "- Dependency consistency: passed"
             echo "- Runtime smoke test: passed"
-            echo
-            echo "No repository files or Docker configuration were changed."
           } >> "${GITHUB_STEP_SUMMARY}"
