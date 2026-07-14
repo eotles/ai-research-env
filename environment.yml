@@ -24,7 +24,7 @@ dependencies:
   - pandas
   - scipy
   - scikit-learn
-  - sympy
+  - sympy=1.13.1
 
   # ---------------------------------------------------------------------------
   # Visualization and notebooks
