@@ -113,7 +113,6 @@ dependencies:
       - "MEDS-transforms>=0.6.7,<0.7"
       - "MEDS-extract[local_parallelism]>=0.6,<0.7"
       - "meds-torch-data[joblib]"
-      - "meds-torch-encoders"
       - "MEDS-trajectory-evaluation"
 
 # Target every platform supported by the current ai-research-env repository.
