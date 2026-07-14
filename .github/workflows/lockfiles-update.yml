@@ -72,15 +72,7 @@ jobs:
           echo "MAMBA_EXE=${MAMBA_EXE}"
 
           "${MAMBA_EXE}" --version
-          micromamba run -n base conda-lock \
-            --conda "${MAMBA_EXE}" \
-            --without-cuda \
-            --pypi_to_conda_lookup_file conda-lock-pypi-mapping.yml \
-            --log-level INFO \
-            --file environment.yml \
-            --platform "${platform}" \
-            --kind explicit \
-            --filename-template "locks/conda-{platform}.lock"
+          micromamba run -n base conda-lock --version
 
       - name: Generate lockfiles
         id: generate
@@ -112,6 +104,7 @@ jobs:
               micromamba run -n base conda-lock \
                 --conda "${MAMBA_EXE}" \
                 --without-cuda \
+                --pypi_to_conda_lookup_file conda-lock-pypi-mapping.yml \
                 --log-level INFO \
                 --file environment.yml \
                 --platform "${platform}" \
