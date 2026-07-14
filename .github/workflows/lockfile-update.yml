@@ -81,7 +81,7 @@ jobs:
           "${MAMBA_EXE}" --version
           "${MAMBA_EXE}" run -n base conda-lock --version
 
-      - name: Generate candidate unified lock
+      - name: Generate candidate lock
         id: generate
         continue-on-error: true
         shell: bash
@@ -144,11 +144,11 @@ jobs:
             echo "Fresh solve matches the committed lockfile."
           fi
 
-      - name: Upload candidate unified lock
+      - name: Upload candidate lock
         if: steps.generate.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
-          name: candidate-unified-conda-lock-${{ github.run_id }}
+          name: candidate-conda-lock-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-conda-lock.yml
           if-no-files-found: error
           retention-days: 14
