@@ -20,7 +20,7 @@ dependencies:
   # ---------------------------------------------------------------------------
   # Core scientific Python
   # ---------------------------------------------------------------------------
-  - numpy
+  - numpy=1.26.4
   - pandas
   - scipy
   - scikit-learn
@@ -80,15 +80,15 @@ dependencies:
   # platforms. A separate CUDA/GPU image can be added when large-scale
   # foundation-model training begins.
   # ---------------------------------------------------------------------------
-  - pytorch
-  - torchvision
-  - torchaudio
+  - pytorch=2.5.1
+  - torchvision=0.20.1
+  - torchaudio=2.5.1
   - cpuonly
 
   # ---------------------------------------------------------------------------
   # Foundation-model training and model infrastructure
   # ---------------------------------------------------------------------------
-  - transformers
+  - transformers=4.48.3
   - accelerate
   - lightning=2.5.*
   - torchmetrics
