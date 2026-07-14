@@ -10,7 +10,7 @@ on:
     paths:
       - environment.yml
       - scripts/generate-lockfile.sh
-      - .github/workflows/lockfiles-update.yml
+      - .github/workflows/lockfile-update.yml
 
   # Weekly monitoring:
   # Freshly resolve the environment and report lockfile drift.
