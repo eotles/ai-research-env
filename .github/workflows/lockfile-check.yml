@@ -5,8 +5,8 @@ on:
     paths:
       - environment.yml
       - scripts/generate-lockfile.sh
-      - .github/workflows/lockfiles-check.yml
-      - .github/workflows/lockfiles-update.yml
+      - .github/workflows/lockfile-check.yml
+      - .github/workflows/lockfile-update.yml
 
   workflow_dispatch:
 
