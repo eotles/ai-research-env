@@ -1,0 +1,86 @@
+name: workflow-lint
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: workflow-lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ShellCheck
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Install actionlint
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+
+          echo "$(go env GOPATH)/bin" >> "${GITHUB_PATH}"
+
+      - name: Lint GitHub Actions workflows
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          actionlint -color
+
+      - name: Lint repository shell scripts
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          mapfile -d '' shell_files < <(
+            find scripts \
+              -type f \
+              -name "*.sh" \
+              -print0
+          )
+
+          if [[ "${#shell_files[@]}" -eq 0 ]]; then
+            echo "No shell scripts found."
+            exit 0
+          fi
+
+          shellcheck "${shell_files[@]}"
+
+      - name: Check Python script syntax
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          python -m py_compile scripts/smoke_test.py
