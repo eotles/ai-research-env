@@ -32,7 +32,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: lockfiles-update
+  group: lockfile-update
   cancel-in-progress: false
 
 jobs:
