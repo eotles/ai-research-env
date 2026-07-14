@@ -105,15 +105,28 @@ def check_distribution_versions() -> None:
 
 def check_imports() -> None:
     """Import all expected top-level Python modules."""
+
+    failures: list[tuple[str, Exception]] = []
+
     for module_name in MODULES:
         try:
             importlib.import_module(module_name)
         except Exception as exc:
-            raise RuntimeError(
-                f"Failed to import required module: {module_name}"
-            ) from exc
+            failures.append((module_name, exc))
+            print(f"FAILED: {module_name}: {exc}")
+        else:
+            print(f"Imported: {module_name}")
 
-        print(f"Imported: {module_name}")
+    if failures:
+        details = "\n".join(
+            f"- {module_name}: {type(exc).__name__}: {exc}"
+            for module_name, exc in failures
+        )
+
+        raise RuntimeError(
+            "One or more required modules failed to import:\n"
+            f"{details}"
+        )
 
 
 def check_commands() -> None:
