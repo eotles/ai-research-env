@@ -25,7 +25,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Configure runtime paths
         shell: bash
@@ -36,7 +36,7 @@ jobs:
             >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
-        uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v3
         with:
           cache-downloads: true
           
@@ -95,7 +95,7 @@ jobs:
 
       - name: Upload candidate explicit lockfiles
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pr-candidate-explicit-lockfiles-${{ github.run_id }}
           path: |
