@@ -1,4 +1,4 @@
-name: lockfiles-update
+name: lockfile-update
 
 on:
   # Normal behavior:
