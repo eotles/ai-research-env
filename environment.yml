@@ -1,64 +1,127 @@
 name: ai-research-env
+
 channels:
   - pytorch
   - conda-forge
   - defaults
+
 channel_priority: strict
+
 dependencies:
-  - python=3.11
+  # ---------------------------------------------------------------------------
+  # Runtime
+  # ---------------------------------------------------------------------------
+  - python=3.12
   - openjdk=25
   - pip
 
-  # core scientific python packages
+  # ---------------------------------------------------------------------------
+  # Core scientific Python
+  # ---------------------------------------------------------------------------
   - numpy
   - pandas
   - scipy
   - scikit-learn
 
-  # visualization and notebooks
+  # ---------------------------------------------------------------------------
+  # Visualization and notebooks
+  # ---------------------------------------------------------------------------
   - matplotlib
   - jupyterlab
   - ipykernel
   - ipywidgets
+  - tensorboard
 
-  # quality-of-life (progress, logging, utilities)
+  # ---------------------------------------------------------------------------
+  # General utilities and configuration
+  # ---------------------------------------------------------------------------
   - tqdm
   - rich
   - pyyaml
   - pydantic
   - python-dotenv
   - requests
+  - typer
+  - joblib
 
-  # data I/O and local analytics
+  # Configuration framework used heavily by the MEDS ecosystem
+  - hydra-core
+  - omegaconf
+
+  # ---------------------------------------------------------------------------
+  # Data I/O and local analytics
+  # ---------------------------------------------------------------------------
   - pyarrow
   - duckdb
   - polars
   - h5py
 
-  # performance
+  # ---------------------------------------------------------------------------
+  # Performance
+  # ---------------------------------------------------------------------------
   - numba
 
-  # dev tooling
+  # ---------------------------------------------------------------------------
+  # Development and testing
+  # ---------------------------------------------------------------------------
   - pytest
   - pytest-cov
   - ruff
   - mypy
   - pre-commit
-  - typer
-  - joblib
 
-  # experiment tracking
-  # - mlflow
-
-  # pytorch stack (from pytorch channel, consistent across platforms)
+  # ---------------------------------------------------------------------------
+  # PyTorch stack
+  #
+  # Keep the base environment portable and CPU-capable across all supported
+  # platforms. A separate CUDA/GPU image can be added when large-scale
+  # foundation-model training begins.
+  # ---------------------------------------------------------------------------
   - pytorch
   - torchvision
   - torchaudio
   - cpuonly
 
-  # tensorflow (pin to a version that is available across channels/platforms)
+  # ---------------------------------------------------------------------------
+  # Foundation-model training and model infrastructure
+  # ---------------------------------------------------------------------------
+  - transformers
+  - accelerate
+  - lightning=2.5.*
+  - torchmetrics
+  - safetensors
+  - einops
+
+  # ---------------------------------------------------------------------------
+  # TensorFlow
+  #
+  # Preserved from the existing general AI research environment.
+  # ---------------------------------------------------------------------------
   - tensorflow=2.18.*
 
-  - jupyterlab
-  - ipykernel
+  # ---------------------------------------------------------------------------
+  # MEDS ecosystem
+  #
+  # These packages are sourced from PyPI but are resolved and locked by
+  # conda-lock as part of the same unified environment.
+  #
+  # Explicit constraints on the core MEDS schema and transform packages keep
+  # the different MEDS components on the same compatible release families.
+  # ---------------------------------------------------------------------------
+  - pip:
+      - "meds>=0.4.1,<0.5"
+      - "MEDS-transforms>=0.6.7,<0.7"
+      - "MEDS-extract[local_parallelism]>=0.6,<0.7"
+      - "meds-torch-data[joblib]"
+      - "meds-torch-encoders"
+      - "MEDS-trajectory-evaluation"
 
+# Target every platform supported by the current ai-research-env repository.
+# conda-lock reads this nonstandard but supported field and produces one
+# multi-platform conda-lock.yml.
+platforms:
+  - linux-64
+  - linux-aarch64
+  - osx-64
+  - osx-arm64
+  - win-64
