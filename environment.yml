@@ -1,9 +1,4 @@
 # Primary package and platform definition for ai-research-env.
-#
-# Package-name equivalences between PyPI and conda are defined separately in:
-#   conda-lock-pypi-mapping.yml
-#
-# Both files are inputs to the conda-lock build process.
 
 name: ai-research-env
 
@@ -119,7 +114,6 @@ dependencies:
       - "meds>=0.4.1,<0.5"
       - "MEDS-transforms>=0.6.7,<0.7"
       - "MEDS-extract[local_parallelism]>=0.6,<0.7"
-      - "meds-torch-data[joblib]"
       - "MEDS-trajectory-evaluation"
 
 # Platforms supported by this environment.
