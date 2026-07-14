@@ -26,7 +26,6 @@ DISTRIBUTIONS = [
     "polars",
     "pyarrow",
     "torch",
-    "tensorflow",
     "transformers",
     "accelerate",
     "lightning",
