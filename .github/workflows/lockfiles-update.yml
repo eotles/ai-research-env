@@ -4,20 +4,22 @@ on:
   # Normal behavior:
   # Rebuild and commit lockfiles whenever the environment definition changes.
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - environment.yml
+      - scripts/generate-lockfiles.sh
+      - .github/workflows/lockfiles-update.yml
 
   # Weekly monitoring:
-  # Re-solve the environment and report whether resolution fails or whether
-  # the newly generated lockfiles differ from the committed lockfiles.
-  # Scheduled runs never commit changes.
+  # Re-solve the environment and report dependency-resolution failures or
+  # lockfile drift. Scheduled runs never commit changes.
   schedule:
     - cron: "17 10 * * 1"
 
   # Manual execution:
-  # Allows the workflow to be run from the GitHub Actions UI without making
-  # a meaningless change to environment.yml.
+  # Allows CI/CD and dependency resolution to be tested without making a
+  # meaningless change to environment.yml.
   workflow_dispatch:
     inputs:
       commit_lockfiles:
@@ -30,8 +32,6 @@ permissions:
   contents: write
 
 concurrency:
-  # Do not allow multiple lockfile-generation jobs to modify the repository
-  # concurrently. A newer push/manual run can wait for the current run.
   group: lockfiles-update
   cancel-in-progress: false
 
@@ -39,6 +39,9 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 70
+
+    env:
+      LOCK_SUMMARY_FILE: ${{ runner.temp }}/lock-generation-summary.tsv
 
     steps:
       - name: Check out repository
@@ -71,7 +74,7 @@ jobs:
           echo "MAMBA_EXE=${MAMBA_EXE}"
 
           "${MAMBA_EXE}" --version
-          micromamba run -n base conda-lock --version
+          "${MAMBA_EXE}" run -n base conda-lock --version
 
       - name: Generate lockfiles
         id: generate
@@ -82,70 +85,42 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          mkdir -p locks
+          bash scripts/generate-lockfiles.sh
 
-          platforms=(
-            linux-64
-            linux-aarch64
-            osx-64
-            osx-arm64
-            win-64
-          )
+      - name: Add platform results to workflow summary
+        if: always()
+        shell: bash
+        run: |
+          set -Eeuo pipefail
 
-          failed=0
+          {
+            echo "## Platform solve results"
+            echo
 
-          for platform in "${platforms[@]}"; do
-            echo "::group::Generating lockfile for ${platform}"
+            if [[ -f "${LOCK_SUMMARY_FILE}" ]]; then
+              echo "| Platform | Result | Duration | Exit code |"
+              echo "|---|---:|---:|---:|"
 
-            start=$(date +%s)
-
-            if timeout 10m \
-              micromamba run -n base conda-lock \
-                --conda "${MAMBA_EXE}" \
-                --without-cuda \
-                --log-level INFO \
-                --file environment.yml \
-                --platform "${platform}" \
-                --kind explicit \
-                --filename-template "locks/conda-{platform}.lock"
-            then
-              status=0
+              tail -n +2 "${LOCK_SUMMARY_FILE}" \
+                | while IFS=$'\t' read -r platform status duration exit_code; do
+                    echo "| ${platform} | ${status} | ${duration}s | ${exit_code} |"
+                  done
             else
-              status=$?
+              echo "No platform summary file was produced."
             fi
-
-            end=$(date +%s)
-            elapsed=$((end-start))
-
-            echo "Elapsed: ${elapsed}s"
-
-            if [[ "${status}" -eq 0 ]]; then
-              echo "✓ ${platform}"
-            elif [[ "${status}" -eq 124 ]]; then
-              echo "::error::${platform} timed out after 10 minutes."
-              failed=1
-            else
-              echo "::error::${platform} failed with exit code ${status}."
-              failed=1
-            fi
-
-            echo "::endgroup::"
-          done
-
-          if [[ "${failed}" -ne 0 ]]; then
-            exit 1
-          fi
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Report solve failure
         if: steps.generate.outcome != 'success'
         shell: bash
         run: |
           {
+            echo
             echo "## Lockfile generation failed"
             echo
             echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
             echo "- One or more platform dependency solves failed."
-            echo "- Review the **Generate lockfiles** step for the platform-specific solver errors."
+            echo "- Review the **Generate lockfiles** step for solver output."
           } >> "${GITHUB_STEP_SUMMARY}"
 
           echo "::error::One or more platform lockfile solves failed."
@@ -156,15 +131,18 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          echo "## Lockfile generation succeeded" >> "${GITHUB_STEP_SUMMARY}"
-          echo >> "${GITHUB_STEP_SUMMARY}"
-          echo "- Trigger: \`${GITHUB_EVENT_NAME}\`" >> "${GITHUB_STEP_SUMMARY}"
+          {
+            echo
+            echo "## Lockfile drift"
+            echo
+          } >> "${GITHUB_STEP_SUMMARY}"
 
           if [[ -n "$(git status --porcelain -- locks/)" ]]; then
-            echo "- Drift detected: **yes**" >> "${GITHUB_STEP_SUMMARY}"
-            echo >> "${GITHUB_STEP_SUMMARY}"
-            echo "A fresh dependency solve produced changes relative to the committed lockfiles." \
-              >> "${GITHUB_STEP_SUMMARY}"
+            {
+              echo "**Drift detected:** yes"
+              echo
+              echo "A fresh dependency solve produced changes relative to the committed lockfiles."
+            } >> "${GITHUB_STEP_SUMMARY}"
 
             echo "::warning::A fresh dependency solve produced lockfile drift."
 
@@ -176,13 +154,25 @@ jobs:
             echo "Diff summary:"
             git diff --stat -- locks/
           else
-            echo "- Drift detected: **no**" >> "${GITHUB_STEP_SUMMARY}"
-            echo >> "${GITHUB_STEP_SUMMARY}"
-            echo "The fresh dependency solve matches the committed lockfiles." \
-              >> "${GITHUB_STEP_SUMMARY}"
+            {
+              echo "**Drift detected:** no"
+              echo
+              echo "The fresh dependency solve matches the committed lockfiles."
+            } >> "${GITHUB_STEP_SUMMARY}"
 
             echo "Fresh solve matches the committed lockfiles."
           fi
+
+      - name: Upload candidate explicit lockfiles
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-explicit-lockfiles-${{ github.run_id }}
+          path: |
+            locks/*.lock
+            ${{ runner.temp }}/lock-generation-summary.tsv
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Commit and push changed lockfiles
         if: >
@@ -223,9 +213,9 @@ jobs:
         run: |
           {
             echo
-            echo "### Commit behavior"
+            echo "## Commit behavior"
             echo
-            echo "This run was configured as a check-only run. No lockfile changes were committed."
+            echo "This was a check-only run. No lockfile changes were committed."
           } >> "${GITHUB_STEP_SUMMARY}"
 
           echo "Check-only run. No lockfile changes will be committed."
