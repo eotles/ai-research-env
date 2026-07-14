@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - environment.yml
-      - scripts/generate-lockfiles.sh
+      - scripts/generate-lockfile.sh
       - .github/workflows/lockfiles-check.yml
       - .github/workflows/lockfiles-update.yml
 
@@ -19,9 +19,9 @@ concurrency:
 
 jobs:
   solve:
-    name: Solve all supported platforms
-    runs-on: ubuntu-latest
-    timeout-minutes: 70
+    name: Solve unified environment
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
 
     steps:
       - name: Check out repository
@@ -32,14 +32,14 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          echo "LOCK_SUMMARY_FILE=${RUNNER_TEMP}/lock-generation-summary.tsv" \
+          echo "CANDIDATE_LOCK=${RUNNER_TEMP}/candidate-conda-lock.yml" \
             >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
         uses: mamba-org/setup-micromamba@v3
         with:
           cache-downloads: true
-          
+
       - name: Install conda-lock
         shell: bash
         run: |
@@ -51,74 +51,19 @@ jobs:
             -c conda-forge \
             "conda-lock=3.*"
 
-      - name: Show solver versions
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          "${MAMBA_EXE}" --version
-          "${MAMBA_EXE}" run -n base conda-lock --version
-
-      - name: Solve environment for all supported platforms
-        id: solve
-        continue-on-error: true
+      - name: Generate candidate unified lock
         shell: bash
         env:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
         run: |
           set -Eeuo pipefail
 
-          bash scripts/generate-lockfiles.sh
+          bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
 
-      - name: Add platform results to workflow summary
-        if: always()
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
-          {
-            echo "## Platform solve results"
-            echo
-
-            if [[ -f "${LOCK_SUMMARY_FILE}" ]]; then
-              echo "| Platform | Result | Duration | Exit code |"
-              echo "|---|---:|---:|---:|"
-
-              tail -n +2 "${LOCK_SUMMARY_FILE}" \
-                | while IFS=$'\t' read -r platform status duration exit_code; do
-                    echo "| ${platform} | ${status} | ${duration}s | ${exit_code} |"
-                  done
-            else
-              echo "No platform summary file was produced."
-            fi
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-      - name: Upload candidate explicit lockfiles
-        if: always()
+      - name: Upload candidate unified lock
         uses: actions/upload-artifact@v7
         with:
-          name: pr-candidate-explicit-lockfiles-${{ github.run_id }}
-          path: |
-            locks/*.lock
-            ${{ runner.temp }}/lock-generation-summary.tsv
-          if-no-files-found: warn
+          name: pr-candidate-unified-conda-lock-${{ github.run_id }}
+          path: ${{ runner.temp }}/candidate-conda-lock.yml
+          if-no-files-found: error
           retention-days: 14
-
-      - name: Fail if any platform could not be solved
-        if: steps.solve.outcome != 'success'
-        shell: bash
-        run: |
-          echo "One or more supported platforms could not be resolved."
-          exit 1
-
-      - name: Report success
-        if: steps.solve.outcome == 'success'
-        shell: bash
-        run: |
-          {
-            echo
-            echo "All supported platforms resolved successfully."
-            echo
-            echo "Generated lockfiles are validation artifacts only."
-            echo "The main-branch update workflow remains responsible for committing lockfile changes."
-          } >> "${GITHUB_STEP_SUMMARY}"
