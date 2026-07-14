@@ -2,22 +2,47 @@ FROM mambaorg/micromamba:1.5.10
 
 WORKDIR /work
 
-COPY locks/conda-linux-64.lock /tmp/conda-linux-64.lock
-COPY locks/conda-linux-aarch64.lock /tmp/conda-linux-aarch64.lock
+# The unified lock contains the complete multi-platform environment,
+# including both conda and PyPI dependencies.
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    conda-lock.yml \
+    /tmp/conda-lock.yml
 
-ARG TARGETARCH
+# Include the canonical runtime smoke test in the image so CI can validate
+# the exact built container.
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    scripts/smoke_test.py \
+    /opt/ai-research-env/smoke_test.py
 
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-      LOCK=/tmp/conda-linux-aarch64.lock; \
-    else \
-      LOCK=/tmp/conda-linux-64.lock; \
-    fi && \
-    micromamba create -y -n ai-research-env -f "$LOCK" && \
-    micromamba clean -a -y
+# Install conda-lock into the base environment, then use the same installation
+# mechanism validated by environment-install-check.
+RUN micromamba install \
+      -y \
+      -n base \
+      -c conda-forge \
+      "conda-lock=3.*" && \
+    micromamba run \
+      -n base \
+      conda-lock install \
+      --conda "$(command -v micromamba)" \
+      --name ai-research-env \
+      /tmp/conda-lock.yml && \
+    micromamba clean --all --yes && \
+    rm -f /tmp/conda-lock.yml
 
-# Make micromamba activate the right env on container start
+# Activate the research environment for container commands and startup.
 ENV ENV_NAME=ai-research-env
 ENV MAMBA_DOCKERFILE_ACTIVATE=1
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8888
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/work"]
+
+CMD [
+  "jupyter",
+  "lab",
+  "--ip=0.0.0.0",
+  "--port=8888",
+  "--no-browser",
+  "--allow-root",
+  "--notebook-dir=/work"
+]
