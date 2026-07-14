@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   solve:
-    name: Solve unified environment
+    name: Solve candidate environment
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -51,7 +51,7 @@ jobs:
             -c conda-forge \
             "conda-lock=3.*"
 
-      - name: Generate candidate unified lock
+      - name: Generate candidate lock
         shell: bash
         env:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
@@ -60,10 +60,10 @@ jobs:
 
           bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
 
-      - name: Upload candidate unified lock
+      - name: Upload candidate lock
         uses: actions/upload-artifact@v7
         with:
-          name: pr-candidate-unified-conda-lock-${{ github.run_id }}
+          name: pr-candidate-conda-lock-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-conda-lock.yml
           if-no-files-found: error
           retention-days: 14
