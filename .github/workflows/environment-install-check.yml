@@ -5,15 +5,16 @@ on:
   pull_request:
     paths:
       - environment.yml
+      - scripts/generate-lockfile.sh
       - scripts/smoke_test.py
       - .github/workflows/environment-install-check.yml
 
-  # Validate the complete installed environment after relevant changes land.
   push:
     branches:
       - main
     paths:
       - environment.yml
+      - scripts/generate-lockfile.sh
       - scripts/smoke_test.py
       - .github/workflows/environment-install-check.yml
 
@@ -83,15 +84,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          "${MAMBA_EXE}" run -n base conda-lock \
-            --conda "${MAMBA_EXE}" \
-            --without-cuda \
-            --log-level INFO \
-            --file environment.yml \
-            --kind lock \
-            --lockfile "${CANDIDATE_LOCK}"
-
-          test -s "${CANDIDATE_LOCK}"
+          bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
 
       - name: Upload candidate unified lock
         uses: actions/upload-artifact@v7
