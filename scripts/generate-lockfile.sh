@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-# Generate the canonical multi-platform unified conda-lock file.
+# Generate the canonical multi-platform conda lockfile.
 #
 # Usage:
 #
@@ -67,12 +67,20 @@ fi
 # Generate atomically
 # -----------------------------------------------------------------------------
 
-mkdir -p "$(dirname "${OUTPUT_FILE}")"
+OUTPUT_DIR="$(dirname "${OUTPUT_FILE}")"
 
-TEMP_FILE="$(mktemp "${OUTPUT_FILE}.tmp.XXXXXX")"
+mkdir -p "${OUTPUT_DIR}"
+
+# Create a temporary directory on the same filesystem as the final lockfile.
+# The lockfile path itself must not already exist when conda-lock is invoked.
+TEMP_DIR="$(
+  mktemp -d "${OUTPUT_DIR}/.conda-lock.tmp.XXXXXX"
+)"
+
+TEMP_FILE="${TEMP_DIR}/conda-lock.yml"
 
 cleanup() {
-  rm -f "${TEMP_FILE}"
+  rm -rf "${TEMP_DIR}"
 }
 
 trap cleanup EXIT
@@ -96,5 +104,5 @@ fi
 
 mv "${TEMP_FILE}" "${OUTPUT_FILE}"
 
-echo "Unified lockfile generated successfully:"
+echo "Canonical lockfile generated successfully:"
 echo "  ${OUTPUT_FILE}"
