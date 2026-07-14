@@ -2,7 +2,7 @@ FROM mambaorg/micromamba:1.5.10
 
 WORKDIR /work
 
-# The unified lock contains the complete multi-platform environment,
+# The canonical lockfile contains the complete multi-platform environment,
 # including both conda and PyPI dependencies.
 COPY --chown=$MAMBA_USER:$MAMBA_USER \
     conda-lock.yml \
@@ -37,12 +37,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8888
 
-CMD [
-  "jupyter",
-  "lab",
-  "--ip=0.0.0.0",
-  "--port=8888",
-  "--no-browser",
-  "--allow-root",
-  "--notebook-dir=/work"
-]
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/work"]
