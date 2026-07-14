@@ -1,0 +1,128 @@
+name: environment-install-check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: environment-install-check
+  cancel-in-progress: false
+
+jobs:
+  install-and-test:
+    name: Install and test complete environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    env:
+      CANDIDATE_LOCK: ${{ runner.temp }}/candidate-conda-lock.yml
+      TEST_ENV_NAME: ai-research-env-test
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          cache-downloads: true
+
+      - name: Install conda-lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          micromamba install \
+            -y \
+            -n base \
+            -c conda-forge \
+            "conda-lock=3.*"
+
+      - name: Show tool versions
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "MAMBA_EXE=${MAMBA_EXE}"
+
+          "${MAMBA_EXE}" --version
+          "${MAMBA_EXE}" run -n base conda-lock --version
+
+      - name: Generate candidate unified lock
+        shell: bash
+        env:
+          CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
+        run: |
+          set -Eeuo pipefail
+
+          "${MAMBA_EXE}" run -n base conda-lock \
+            --conda "${MAMBA_EXE}" \
+            --without-cuda \
+            --log-level INFO \
+            --file environment.yml \
+            --platform linux-64 \
+            --kind lock \
+            --lockfile "${CANDIDATE_LOCK}"
+
+          test -s "${CANDIDATE_LOCK}"
+
+      - name: Upload candidate unified lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-unified-conda-lock-${{ github.run_id }}
+          path: ${{ runner.temp }}/candidate-conda-lock.yml
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Install complete locked environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          "${MAMBA_EXE}" run -n base conda-lock install \
+            --conda "${MAMBA_EXE}" \
+            --name "${TEST_ENV_NAME}" \
+            "${CANDIDATE_LOCK}"
+
+      - name: Show installed Python version
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          "${MAMBA_EXE}" run \
+            -n "${TEST_ENV_NAME}" \
+            python --version
+
+      - name: Check Python dependency consistency
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          "${MAMBA_EXE}" run \
+            -n "${TEST_ENV_NAME}" \
+            python -m pip check
+
+      - name: Run environment smoke test
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          "${MAMBA_EXE}" run \
+            -n "${TEST_ENV_NAME}" \
+            python scripts/smoke_test.py
+
+      - name: Report success
+        shell: bash
+        run: |
+          {
+            echo "## Complete environment installation succeeded"
+            echo
+            echo "- Candidate lock format: unified conda-lock"
+            echo "- Platform: linux-64"
+            echo "- Dependency consistency check: passed"
+            echo "- Runtime smoke test: passed"
+            echo
+            echo "No repository files or Docker configuration were changed."
+          } >> "${GITHUB_STEP_SUMMARY}"
