@@ -1,24 +1,53 @@
 name: lockfiles-update
 
 on:
+  # Normal behavior:
+  # Rebuild and commit lockfiles whenever the environment definition changes.
   push:
     branches: [main]
     paths:
       - environment.yml
 
+  # Weekly monitoring:
+  # Re-solve the environment and report whether resolution fails or whether
+  # the newly generated lockfiles differ from the committed lockfiles.
+  # Scheduled runs never commit changes.
+  schedule:
+    - cron: "17 10 * * 1"
+
+  # Manual execution:
+  # Allows the workflow to be run from the GitHub Actions UI without making
+  # a meaningless change to environment.yml.
+  workflow_dispatch:
+    inputs:
+      commit_lockfiles:
+        description: "Commit regenerated lockfiles if they changed"
+        required: true
+        default: false
+        type: boolean
+
 permissions:
   contents: write
+
+concurrency:
+  # Do not allow multiple lockfile-generation jobs to modify the repository
+  # concurrently. A newer push/manual run can wait for the current run.
+  group: lockfiles-update
+  cancel-in-progress: false
 
 jobs:
   update:
     runs-on: ubuntu-latest
+    timeout-minutes: 70
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - uses: mamba-org/setup-micromamba@v2
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v2
         with:
           cache-downloads: true
 
@@ -26,18 +55,27 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          micromamba install -y -n base -c conda-forge "conda-lock=3.*"
+
+          micromamba install \
+            -y \
+            -n base \
+            -c conda-forge \
+            "conda-lock=3.*"
 
       - name: Show solver versions
         shell: bash
         run: |
           set -Eeuo pipefail
 
+          echo "Trigger: ${GITHUB_EVENT_NAME}"
           echo "MAMBA_EXE=${MAMBA_EXE}"
+
           "${MAMBA_EXE}" --version
           micromamba run -n base conda-lock --version
 
       - name: Generate lockfiles
+        id: generate
+        continue-on-error: true
         shell: bash
         env:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
@@ -84,7 +122,7 @@ jobs:
             if [[ "${status}" -eq 0 ]]; then
               echo "✓ ${platform}"
             elif [[ "${status}" -eq 124 ]]; then
-              echo "::error::${platform} timed out."
+              echo "::error::${platform} timed out after 10 minutes."
               failed=1
             else
               echo "::error::${platform} failed with exit code ${status}."
@@ -98,19 +136,103 @@ jobs:
             exit 1
           fi
 
-      - name: Commit and push if changed
+      - name: Report solve failure
+        if: steps.generate.outcome != 'success'
+        shell: bash
+        run: |
+          {
+            echo "## Lockfile generation failed"
+            echo
+            echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
+            echo "- One or more platform dependency solves failed."
+            echo "- Review the **Generate lockfiles** step for the platform-specific solver errors."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "::error::One or more platform lockfile solves failed."
+
+      - name: Report lockfile drift
+        if: steps.generate.outcome == 'success'
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          if [[ -n "$(git status --porcelain)" ]]; then
+          echo "## Lockfile generation succeeded" >> "${GITHUB_STEP_SUMMARY}"
+          echo >> "${GITHUB_STEP_SUMMARY}"
+          echo "- Trigger: \`${GITHUB_EVENT_NAME}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ -n "$(git status --porcelain -- locks/)" ]]; then
+            echo "- Drift detected: **yes**" >> "${GITHUB_STEP_SUMMARY}"
+            echo >> "${GITHUB_STEP_SUMMARY}"
+            echo "A fresh dependency solve produced changes relative to the committed lockfiles." \
+              >> "${GITHUB_STEP_SUMMARY}"
+
+            echo "::warning::A fresh dependency solve produced lockfile drift."
+
+            echo
+            echo "Changed lockfiles:"
+            git status --short -- locks/
+
+            echo
+            echo "Diff summary:"
+            git diff --stat -- locks/
+          else
+            echo "- Drift detected: **no**" >> "${GITHUB_STEP_SUMMARY}"
+            echo >> "${GITHUB_STEP_SUMMARY}"
+            echo "The fresh dependency solve matches the committed lockfiles." \
+              >> "${GITHUB_STEP_SUMMARY}"
+
+            echo "Fresh solve matches the committed lockfiles."
+          fi
+
+      - name: Commit and push changed lockfiles
+        if: >
+          steps.generate.outcome == 'success' &&
+          (
+            github.event_name == 'push' ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              inputs.commit_lockfiles
+            )
+          )
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -n "$(git status --porcelain -- locks/)" ]]; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
 
             git add locks/
-
             git commit -m "Update conda lockfiles"
             git push
           else
-            echo "No lockfile changes."
+            echo "No lockfile changes to commit."
           fi
+
+      - name: Report non-committing run
+        if: >
+          steps.generate.outcome == 'success' &&
+          (
+            github.event_name == 'schedule' ||
+            (
+              github.event_name == 'workflow_dispatch' &&
+              !inputs.commit_lockfiles
+            )
+          )
+        shell: bash
+        run: |
+          {
+            echo
+            echo "### Commit behavior"
+            echo
+            echo "This run was configured as a check-only run. No lockfile changes were committed."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "Check-only run. No lockfile changes will be committed."
+
+      - name: Fail workflow if lockfile generation failed
+        if: steps.generate.outcome != 'success'
+        shell: bash
+        run: |
+          echo "Lockfile generation failed. See the solver output above."
+          exit 1
