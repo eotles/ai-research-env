@@ -17,12 +17,19 @@ jobs:
     timeout-minutes: 90
 
     env:
-      CANDIDATE_LOCK: ${{ runner.temp }}/candidate-conda-lock.yml
       TEST_ENV_NAME: ai-research-env-test
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Configure runtime paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "CANDIDATE_LOCK=${RUNNER_TEMP}/candidate-conda-lock.yml" \
+            >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
         uses: mamba-org/setup-micromamba@v2
