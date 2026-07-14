@@ -7,6 +7,7 @@ on:
     branches: [main]
     paths:
       - environment.yml
+      - conda-lock-pypi-mapping.yml
 
   # Weekly monitoring:
   # Re-solve the environment and report whether resolution fails or whether
@@ -71,7 +72,15 @@ jobs:
           echo "MAMBA_EXE=${MAMBA_EXE}"
 
           "${MAMBA_EXE}" --version
-          micromamba run -n base conda-lock --version
+          micromamba run -n base conda-lock \
+            --conda "${MAMBA_EXE}" \
+            --without-cuda \
+            --pypi_to_conda_lookup_file conda-lock-pypi-mapping.yml \
+            --log-level INFO \
+            --file environment.yml \
+            --platform "${platform}" \
+            --kind explicit \
+            --filename-template "locks/conda-{platform}.lock"
 
       - name: Generate lockfiles
         id: generate
