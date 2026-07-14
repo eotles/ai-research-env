@@ -101,11 +101,13 @@ jobs:
           "${MAMBA_EXE}" run \
             -n "${TEST_ENV_NAME}" \
             python --version
-
-      - name: Check Python dependency consistency
+      
+      - name: Validate installed dependency consistency
         shell: bash
         run: |
           set -Eeuo pipefail
+
+          echo "Checking installed Python package metadata for dependency conflicts..."
 
           "${MAMBA_EXE}" run \
             -n "${TEST_ENV_NAME}" \
