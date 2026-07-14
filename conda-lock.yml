@@ -13,11 +13,11 @@
 version: 1
 metadata:
   content_hash:
-    linux-64: 5533ed41472d82f7d0d6221a6d96daf95bc202a7bb390aa3e7afb47426e11b69
-    linux-aarch64: 5dc3bb6ed0731dac45306ba3bb04100c94dfb9a84ff0c8b3244ba7f681424e20
-    osx-64: 9815c0b9d95b92eaf4de313bfd344af5bb862715e3a86e743ce89b1802b3504b
-    osx-arm64: fec31b5b9eb0f3434b8357d144758e5876d7f807fc9d777f8f7f15838fafd0ed
-    win-64: 28d0726572c3d11ee259809b2b200a8710b8f1411a7887c52f8e65ef64ee43d2
+    linux-64: 1733f12cf694b1bc27f5718e7dfc5ea146ee5cee6321515af2d0b4378657fba6
+    linux-aarch64: c05201b9132becc0b935bdfca4a95588acd94846311920aadcc6b50f80efd7ab
+    osx-64: 5471a3fa1692461b55d9240bca610dcabcd7e7372601db93d3fa29c7b06619a8
+    osx-arm64: bb50a3844ba94df99fe89dc7a3bf75aa03f787174ddd648e418b9d548daf1c92
+    win-64: f994de8a029b007623b1c56eecf33a2bdd69f5a808cb2e04ccfdc156f03689b4
   channels:
   - url: pytorch
     used_env_vars: []
@@ -21682,6 +21682,71 @@ package:
   hash:
     md5: 67d1790eefa81ed305b89d8e314c7923
     sha256: 44e42919397bd00bfaa47358a6ca93d4c21493a8c18600176212ec21a8d25ca5
+  category: main
+  optional: false
+- name: pytest-timeout
+  version: 2.4.0
+  manager: conda
+  platform: linux-64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.9'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-timeout-2.4.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: 52a50ca8ea1b3496fbd3261bea8c5722
+    sha256: 25afa7d9387f2aa151b45eb6adf05f9e9e3f58c8de2bc09be7e85c114118eeb9
+  category: main
+  optional: false
+- name: pytest-timeout
+  version: 2.4.0
+  manager: conda
+  platform: linux-aarch64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.9'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-timeout-2.4.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: 52a50ca8ea1b3496fbd3261bea8c5722
+    sha256: 25afa7d9387f2aa151b45eb6adf05f9e9e3f58c8de2bc09be7e85c114118eeb9
+  category: main
+  optional: false
+- name: pytest-timeout
+  version: 2.4.0
+  manager: conda
+  platform: osx-64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.9'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-timeout-2.4.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: 52a50ca8ea1b3496fbd3261bea8c5722
+    sha256: 25afa7d9387f2aa151b45eb6adf05f9e9e3f58c8de2bc09be7e85c114118eeb9
+  category: main
+  optional: false
+- name: pytest-timeout
+  version: 2.4.0
+  manager: conda
+  platform: osx-arm64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.9'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-timeout-2.4.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: 52a50ca8ea1b3496fbd3261bea8c5722
+    sha256: 25afa7d9387f2aa151b45eb6adf05f9e9e3f58c8de2bc09be7e85c114118eeb9
+  category: main
+  optional: false
+- name: pytest-timeout
+  version: 2.4.0
+  manager: conda
+  platform: win-64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.9'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-timeout-2.4.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: 52a50ca8ea1b3496fbd3261bea8c5722
+    sha256: 25afa7d9387f2aa151b45eb6adf05f9e9e3f58c8de2bc09be7e85c114118eeb9
   category: main
   optional: false
 - name: python
