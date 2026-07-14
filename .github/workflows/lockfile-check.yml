@@ -1,4 +1,4 @@
-name: lockfiles-check
+name: lockfile-check
 
 on:
   pull_request:
