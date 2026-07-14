@@ -40,14 +40,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 70
 
-    env:
-      LOCK_SUMMARY_FILE: ${{ runner.temp }}/lock-generation-summary.tsv
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Configure runtime paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          echo "LOCK_SUMMARY_FILE=${RUNNER_TEMP}/lock-generation-summary.tsv" \
+            >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
         uses: mamba-org/setup-micromamba@v2
