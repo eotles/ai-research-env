@@ -30,6 +30,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: lockfile-update
@@ -100,10 +101,10 @@ jobs:
             echo "## Lockfile generation failed"
             echo
             echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
-            echo "- The multi-platform unified environment could not be resolved."
+            echo "- The multi-platform environment could not be resolved."
           } >> "${GITHUB_STEP_SUMMARY}"
 
-          echo "::error::Unified lockfile generation failed."
+          echo "::error::Lockfile generation failed."
 
       - name: Report lockfile drift
         if: steps.generate.outcome == 'success'
@@ -124,6 +125,7 @@ jobs:
             } >> "${GITHUB_STEP_SUMMARY}"
 
             echo "::warning::No committed conda-lock.yml exists."
+
           elif ! cmp -s conda-lock.yml "${CANDIDATE_LOCK}"; then
             {
               echo "**Drift detected:** yes"
@@ -132,8 +134,8 @@ jobs:
             } >> "${GITHUB_STEP_SUMMARY}"
 
             echo "::warning::A fresh dependency solve produced lockfile drift."
-
             diff --brief conda-lock.yml "${CANDIDATE_LOCK}" || true
+
           else
             {
               echo "**Drift detected:** no"
@@ -154,6 +156,7 @@ jobs:
           retention-days: 14
 
       - name: Commit and push changed lockfile
+        id: commit_lockfile
         if: >
           steps.generate.outcome == 'success' &&
           (
@@ -177,11 +180,48 @@ jobs:
               "github-actions[bot]@users.noreply.github.com"
 
             git add conda-lock.yml
-            git commit -m "Update unified conda lockfile"
+            git commit -m "Update canonical conda lockfile"
             git push
+
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+
+            {
+              echo
+              echo "## Canonical lockfile update"
+              echo
+              echo "The canonical \`conda-lock.yml\` changed and was committed."
+            } >> "${GITHUB_STEP_SUMMARY}"
           else
             echo "No lockfile changes to commit."
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+
+            {
+              echo
+              echo "## Canonical lockfile update"
+              echo
+              echo "No lockfile changes were required."
+            } >> "${GITHUB_STEP_SUMMARY}"
           fi
+
+      - name: Trigger Docker image workflow
+        if: steps.commit_lockfile.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+
+          gh workflow run docker-image.yml \
+            --ref main \
+            -f push_image=true
+
+          {
+            echo
+            echo "## Downstream workflow"
+            echo
+            echo "The canonical lockfile changed."
+            echo "The Docker image workflow was dispatched for \`main\`."
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Report non-committing run
         if: >
@@ -206,5 +246,5 @@ jobs:
         if: steps.generate.outcome != 'success'
         shell: bash
         run: |
-          echo "Unified lockfile generation failed."
+          echo "Lockfile generation failed."
           exit 1
