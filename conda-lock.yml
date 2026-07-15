@@ -11739,18 +11739,18 @@ package:
   category: main
   optional: false
 - name: libclang-cpp21.1
-  version: 21.1.8
+  version: 21.1.0
   manager: conda
   platform: linux-64
   dependencies:
     __glibc: '>=2.17,<3.0.a0'
     libgcc: '>=14'
-    libllvm21: '>=21.1.8,<21.2.0a0'
+    libllvm21: '>=21.1.0,<21.2.0a0'
     libstdcxx: '>=14'
-  url: https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp21.1-21.1.8-default_h99862b1_4.conda
+  url: https://conda.anaconda.org/conda-forge/linux-64/libclang-cpp21.1-21.1.0-default_h99862b1_1.conda
   hash:
-    md5: 80edae9c0a5feaf93fa2996c266d1ce7
-    sha256: aa61ed39af5944d05cd27672d2b520dbf2b3428575fbc7192acede709bed974a
+    md5: d599b346638b9216c1e8f9146713df05
+    sha256: efe9f1363a49668d10aacdb8be650433fab659f05ed6cc2b9da00e3eb7eaf602
   category: main
   optional: false
 - name: libclang-cpp21.1
@@ -13534,20 +13534,20 @@ package:
   category: main
   optional: false
 - name: libllvm21
-  version: 21.1.8
+  version: 21.1.0
   manager: conda
   platform: linux-64
   dependencies:
-    __glibc: '>=2.28,<3.0.a0'
+    __glibc: '>=2.17,<3.0.a0'
     libgcc: '>=14'
     libstdcxx: '>=14'
-    libxml2: '>=2.13.9,<2.14.0a0'
-    zlib: '>=1.2.13,<2.0a0'
-    zstd: '>=1.5.6,<1.6.0a0'
-  url: https://repo.anaconda.com/pkgs/main/linux-64/libllvm21-21.1.8-h5ad376a_0.conda
+    libxml2: '>=2.13.8,<2.14.0a0'
+    libzlib: '>=1.3.1,<2.0a0'
+    zstd: '>=1.5.7,<1.6.0a0'
+  url: https://conda.anaconda.org/conda-forge/linux-64/libllvm21-21.1.0-hecd9e04_0.conda
   hash:
-    md5: 201f901e29a6efcf510a9366357cc3f2
-    sha256: c8ec4f28ec7244df626740d96892cf10ff575e97a6e0d9e6db19ce7da9aa7164
+    md5: 9ad637a7ac380c442be142dfb0b1b955
+    sha256: d190f1bf322149321890908a534441ca2213a9a96c59819da6cabf2c5b474115
   category: main
   optional: false
 - name: libllvm21
