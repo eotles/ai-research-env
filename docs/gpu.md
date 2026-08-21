@@ -96,13 +96,13 @@ $HOME/.cache/matplotlib
 
 ### Start or update the environment
 
-At the start of a Workspace session, run one command:
+At the start of a Workspace session, explicitly run:
 
 ```bash
 bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh"
 ```
 
-Each explicit invocation:
+Each invocation:
 
 1. Fast-forwards the local `ai-research-env` checkout to the latest `origin/main`.
 2. Records the exact Git commit being used.
@@ -112,9 +112,7 @@ Each explicit invocation:
 6. Runs `pip check` after an install or update.
 7. Starts an interactive Bash shell with `ai-research-env-gpu` activated.
 
-This provides an explicit "latest" workflow without hidden login-time behavior.
-
-When the lock has not changed, the command should mostly be a quick Git update check before entering the existing environment.
+This provides an explicit latest-version workflow without hidden login-time behavior. If the lock has not changed, the command should mostly be a quick Git update check before entering the existing environment.
 
 To force a clean reinstall from the current lock:
 
