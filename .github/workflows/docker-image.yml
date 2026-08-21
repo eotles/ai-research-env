@@ -7,6 +7,7 @@ on:
     paths:
       - conda-lock.yml
       - Dockerfile
+      - config/**
       - scripts/smoke_test.py
       - .github/workflows/docker-image.yml
 
@@ -81,6 +82,27 @@ jobs:
             --rm \
             ai-research-env:test-${{ matrix.arch }} \
             python /opt/ai-research-env/smoke_test.py
+
+      - name: Validate Git and Zsh terminal environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          docker run \
+            --rm \
+            ai-research-env:test-${{ matrix.arch }} \
+            zsh -lic '
+              set -e
+              test "$SHELL" = /bin/zsh
+              test "$CONDA_DEFAULT_ENV" = ai-research-env
+              command -v git
+              git --version
+              command -v python
+              python --version
+              test -f "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F '"shell_command": ["/bin/zsh", "-l"]' \
+                "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+            '
 
       - name: Validate Jupyter
         shell: bash
