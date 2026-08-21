@@ -5,11 +5,6 @@ set -Eeuo pipefail
 # Manually bootstrap/update and enter the canonical ai-research-env GPU
 # environment on an EFabric Workspace.
 #
-# Recommended invocation:
-#
-#   bash <(curl -fsSL \
-#     https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh)
-#
 # Each invocation:
 #   1. Clones or fast-forwards ai-research-env to the requested branch.
 #   2. Reconciles ai-research-env-gpu only when conda-lock-gpu.yml changes.
@@ -258,12 +253,37 @@ fi
 
 export AI_RESEARCH_ENV_COMMIT="${CURRENT_COMMIT}"
 export AI_RESEARCH_ENV_LOCK_SHA256="${LOCK_HASH}"
+export AI_RESEARCH_ENV_GPU_ENV_NAME="${ENV_NAME}"
 
-# Activate in this process, then replace it with the user's interactive Bash
-# shell. No shell startup file is modified.
-eval "$(micromamba shell hook --shell bash)"
+# Use a dedicated rcfile for the launched shell. This avoids modifying ~/.bashrc
+# while still preserving the user's normal interactive Bash setup. Activation is
+# done in the child shell with nounset disabled because some conda activation
+# scripts legitimately probe unset variables.
+SHELL_RC="${STATE_DIR}/efabric-shell.bashrc"
+cat > "${SHELL_RC}" <<EOF
+if [[ -f "\${HOME}/.bashrc" ]]; then
+  source "\${HOME}/.bashrc"
+fi
+
+export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX}"
+export MPLCONFIGDIR="${MPLCONFIGDIR}"
+export AI_RESEARCH_ENV_COMMIT="${CURRENT_COMMIT}"
+export AI_RESEARCH_ENV_LOCK_SHA256="${LOCK_HASH}"
+export AI_RESEARCH_ENV_GPU_ENV_NAME="${ENV_NAME}"
+
+set +u
+eval "\$(micromamba shell hook --shell bash)"
 micromamba activate "${ENV_NAME}"
+
+case "\${PS1:-}" in
+  "(${ENV_NAME}) "*) ;;
+  *) PS1="(${ENV_NAME}) \${PS1:-\\u@\\h:\\w\\$ }" ;;
+esac
+
+printf 'Activated %s\n' "${ENV_NAME}"
+printf 'Python: %s\n' "\$(command -v python)"
+EOF
 
 echo
 echo "Starting interactive Bash with ${ENV_NAME} activated."
-exec bash -i
+exec bash --rcfile "${SHELL_RC}" -i
