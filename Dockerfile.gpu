@@ -2,10 +2,15 @@ FROM mambaorg/micromamba:2.8.1-debian12-slim
 
 WORKDIR /work
 
-# Match the interactive tooling provided by the portable CPU image.
+# Match the interactive tooling provided by the portable CPU image. Include
+# OpenSSH and CA certificates so Git works with both SSH and HTTPS remotes.
 USER root
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git zsh && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      git \
+      openssh-client \
+      zsh && \
     rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER
 
