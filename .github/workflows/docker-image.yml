@@ -1,12 +1,21 @@
 name: docker-image
 
 on:
+  pull_request:
+    paths:
+      - conda-lock.yml
+      - Dockerfile
+      - config/**
+      - scripts/smoke_test.py
+      - .github/workflows/docker-image.yml
+
   push:
     branches:
       - main
     paths:
       - conda-lock.yml
       - Dockerfile
+      - config/**
       - scripts/smoke_test.py
       - .github/workflows/docker-image.yml
 
@@ -23,8 +32,8 @@ permissions:
   packages: write
 
 concurrency:
-  group: docker-image
-  cancel-in-progress: false
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-image:
@@ -81,6 +90,31 @@ jobs:
             --rm \
             ai-research-env:test-${{ matrix.arch }} \
             python /opt/ai-research-env/smoke_test.py
+
+      - name: Validate Git and Zsh terminal environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          docker run \
+            --rm \
+            ai-research-env:test-${{ matrix.arch }} \
+            zsh -lic '
+              set -e
+              echo "SHELL=$SHELL"
+              echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-}"
+              test "$SHELL" = /bin/zsh
+              test "$CONDA_DEFAULT_ENV" = ai-research-env
+              command -v zsh
+              zsh --version
+              command -v git
+              git --version
+              command -v python
+              python --version
+              test -f "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F shell_command "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F /bin/zsh "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+            '
 
       - name: Validate Jupyter
         shell: bash

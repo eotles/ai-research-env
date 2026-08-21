@@ -1,0 +1,28 @@
+# Minimal interactive Zsh configuration for ai-research-env containers.
+
+# Familiar command-line editing behavior.
+bindkey -e
+
+# Persistent command history.
+HISTFILE="${HOME}/.zsh_history"
+HISTSIZE=10000
+SAVEHIST=10000
+
+setopt APPEND_HISTORY
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_DUPS
+setopt HIST_REDUCE_BLANKS
+
+# Standard Zsh completion.
+autoload -Uz compinit
+compinit
+
+# Ensure the configured micromamba research environment is active in newly
+# opened interactive shells, including JupyterLab terminals.
+if command -v micromamba >/dev/null 2>&1; then
+  eval "$(micromamba shell hook --shell zsh)"
+
+  if [[ "${CONDA_DEFAULT_ENV:-}" != "${ENV_NAME:-ai-research-env}" ]]; then
+    micromamba activate "${ENV_NAME:-ai-research-env}"
+  fi
+fi

@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/**"
       - "scripts/**"
+      - "config/**"
 
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - ".github/workflows/**"
       - "scripts/**"
+      - "config/**"
 
   workflow_dispatch:
 
@@ -83,4 +85,4 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          python -m compileall -q scripts
+          python -m compileall -q scripts config
