@@ -63,6 +63,91 @@ docker run -it --rm \
   ghcr.io/eotles/ai-research-env:gpu
 ```
 
+## EFabric native GPU launcher
+
+EFabric Workspaces provide their own GPU base image and persistent home storage. The tested integration path is to use EFabric's `gpu-base` Workflow Image and install the canonical `conda-lock-gpu.yml` environment into persistent home storage.
+
+This keeps GitHub and `conda-lock-gpu.yml` as the source of truth while avoiding a second EFabric-specific dependency specification.
+
+Nothing is added to `~/.bashrc`, and nothing runs automatically at login. Updating and entering the environment is always an explicit user action.
+
+### Launch the latest environment
+
+Create an EFabric GPU Workspace using the EFabric `gpu-base` Workflow Image, SSH into it, and run one command:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh)
+```
+
+The launcher itself is fetched fresh from `main` on every invocation. There is no bootstrap script that the user needs to install, remember, or manually update on EFabric.
+
+Internally, the launcher maintains a persistent checkout and micromamba environment under the EFabric home directory because the canonical lockfile and environment should survive Workspace replacement:
+
+```text
+$HOME/src/ai-research-env
+$HOME/.micromamba
+$HOME/.ai-research-env
+$HOME/.cache/matplotlib
+```
+
+Those paths are implementation state rather than the user-facing launch interface. The normal entry point remains the single remote command above.
+
+`MPLCONFIGDIR` is set explicitly because some EFabric Workspaces expose `$HOME/.config` as a non-writable file rather than a normal directory.
+
+Each invocation:
+
+1. Fetches the current launcher from GitHub before execution.
+2. Fast-forwards the persistent `ai-research-env` checkout to the latest `origin/main`.
+3. Records the exact Git commit being used.
+4. Computes the SHA256 of `conda-lock-gpu.yml`.
+5. Leaves the existing persistent GPU environment untouched when the lock is unchanged.
+6. Recreates `ai-research-env-gpu` from the canonical lock when the lock changes.
+7. Runs `pip check` after an install or update.
+8. Starts an interactive Bash shell with `ai-research-env-gpu` activated.
+
+This provides an explicit latest-version workflow without hidden login-time behavior. If the lock has not changed, the command should mostly be a quick Git update check before entering the existing environment.
+
+Because the command intentionally executes the current `main` version of the launcher, it is appropriate for interactive development where "latest" behavior is desired. For a reproducible research run, record the commit and lock SHA256 printed by the launcher.
+
+### Optional launcher modes
+
+To force a clean reinstall from the current lock:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh) \
+  --force-reinstall
+```
+
+To rerun full hardware qualification before entering the shell:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh) \
+  --smoke-test
+```
+
+To update/reconcile the environment without launching an interactive shell:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh) \
+  --no-shell
+```
+
+The launcher prints the exact repository commit and lock SHA256. Inside the launched shell, the environment is already activated and regular commands can be used directly:
+
+```bash
+python your_script.py
+jupyter lab
+```
+
+The launcher also exports:
+
+```text
+AI_RESEARCH_ENV_COMMIT
+AI_RESEARCH_ENV_LOCK_SHA256
+```
+
+so the running shell retains the exact repository and lock provenance.
+
 ## GPU qualification
 
 GitHub-hosted runners do not provide a CUDA GPU. CI therefore performs two levels of validation.
@@ -89,7 +174,7 @@ python /opt/ai-research-env/gpu_smoke_test.py
 On EFabric or another GPU-backed host, run:
 
 ```bash
-python /opt/ai-research-env/gpu_smoke_test.py --require-cuda
+python scripts/gpu_smoke_test.py --require-cuda
 ```
 
 This additionally requires and exercises:
@@ -101,9 +186,9 @@ This additionally requires and exercises:
 - a small Hugging Face Transformers model forward pass on CUDA
 - finite model outputs
 
-This is the hardware qualification step for a newly published GPU image.
+The EFabric launcher's `--smoke-test` option runs both the general environment smoke test and this real-GPU qualification.
 
-## Native installation
+## Manual native installation
 
 The GPU lock can also be installed directly on a Linux x86-64 host:
 
