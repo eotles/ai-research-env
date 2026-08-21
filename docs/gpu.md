@@ -71,19 +71,17 @@ This keeps GitHub and `conda-lock-gpu.yml` as the source of truth while avoiding
 
 Nothing is added to `~/.bashrc`, and nothing runs automatically at login. Updating and entering the environment is always an explicit user action.
 
-### First-time setup
+### Launch the latest environment
 
-Create an EFabric GPU Workspace using the EFabric `gpu-base` Workflow Image, then SSH into it and run:
+Create an EFabric GPU Workspace using the EFabric `gpu-base` Workflow Image, SSH into it, and run one command:
 
 ```bash
-mkdir -p "$HOME/src"
-
-git clone \
-  https://github.com/eotles/ai-research-env.git \
-  "$HOME/src/ai-research-env"
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh)
 ```
 
-The repository and environment live in persistent EFabric home storage:
+The launcher itself is fetched fresh from `main` on every invocation. There is no bootstrap script that the user needs to install, remember, or manually update on EFabric.
+
+Internally, the launcher maintains a persistent checkout and micromamba environment under the EFabric home directory because the canonical lockfile and environment should survive Workspace replacement:
 
 ```text
 $HOME/src/ai-research-env
@@ -92,52 +90,49 @@ $HOME/.ai-research-env
 $HOME/.cache/matplotlib
 ```
 
+Those paths are implementation state rather than the user-facing launch interface. The normal entry point remains the single remote command above.
+
 `MPLCONFIGDIR` is set explicitly because some EFabric Workspaces expose `$HOME/.config` as a non-writable file rather than a normal directory.
-
-### Start or update the environment
-
-At the start of a Workspace session, explicitly run:
-
-```bash
-bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh"
-```
 
 Each invocation:
 
-1. Fast-forwards the local `ai-research-env` checkout to the latest `origin/main`.
-2. Records the exact Git commit being used.
-3. Computes the SHA256 of `conda-lock-gpu.yml`.
-4. Leaves the existing persistent GPU environment untouched when the lock is unchanged.
-5. Recreates `ai-research-env-gpu` from the canonical lock when the lock changes.
-6. Runs `pip check` after an install or update.
-7. Starts an interactive Bash shell with `ai-research-env-gpu` activated.
+1. Fetches the current launcher from GitHub before execution.
+2. Fast-forwards the persistent `ai-research-env` checkout to the latest `origin/main`.
+3. Records the exact Git commit being used.
+4. Computes the SHA256 of `conda-lock-gpu.yml`.
+5. Leaves the existing persistent GPU environment untouched when the lock is unchanged.
+6. Recreates `ai-research-env-gpu` from the canonical lock when the lock changes.
+7. Runs `pip check` after an install or update.
+8. Starts an interactive Bash shell with `ai-research-env-gpu` activated.
 
 This provides an explicit latest-version workflow without hidden login-time behavior. If the lock has not changed, the command should mostly be a quick Git update check before entering the existing environment.
+
+Because the command intentionally executes the current `main` version of the launcher, it is appropriate for interactive development where "latest" behavior is desired. For a reproducible research run, record the commit and lock SHA256 printed by the launcher.
+
+### Optional launcher modes
 
 To force a clean reinstall from the current lock:
 
 ```bash
-bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh" \
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh) \
   --force-reinstall
 ```
 
 To rerun full hardware qualification before entering the shell:
 
 ```bash
-bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh" \
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh) \
   --smoke-test
 ```
 
 To update/reconcile the environment without launching an interactive shell:
 
 ```bash
-bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh" \
+bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh) \
   --no-shell
 ```
 
-The launcher prints the exact repository commit and lock SHA256. Record those values for research runs where provenance matters.
-
-Inside the launched shell, the environment is already activated and regular commands can be used directly:
+The launcher prints the exact repository commit and lock SHA256. Inside the launched shell, the environment is already activated and regular commands can be used directly:
 
 ```bash
 python your_script.py
