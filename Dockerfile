@@ -4,9 +4,15 @@ WORKDIR /work
 
 # Git and Zsh are container-level tooling rather than scientific environment
 # dependencies. Keep environment.yml shell-neutral and cross-platform.
+# Include OpenSSH and CA certificates so Git works with both SSH and HTTPS
+# remotes in remote research environments.
 USER root
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git zsh && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      git \
+      openssh-client \
+      zsh && \
     rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER
 
