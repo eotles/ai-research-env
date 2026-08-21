@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          conda-lock install \
+          "${MAMBA_EXE}" run -n base conda-lock install \
             --conda "${MAMBA_EXE}" \
             --name ai-research-env-gpu \
             "${CANDIDATE_LOCK}"
@@ -71,16 +71,16 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          micromamba run -n ai-research-env-gpu python -m pip check
+          "${MAMBA_EXE}" run -n ai-research-env-gpu python -m pip check
 
       - name: Run general environment smoke test
         shell: bash
         run: |
           set -Eeuo pipefail
-          micromamba run -n ai-research-env-gpu python scripts/smoke_test.py
+          "${MAMBA_EXE}" run -n ai-research-env-gpu python scripts/smoke_test.py
 
       - name: Validate CUDA-enabled PyTorch build
         shell: bash
         run: |
           set -Eeuo pipefail
-          micromamba run -n ai-research-env-gpu python scripts/gpu_smoke_test.py
+          "${MAMBA_EXE}" run -n ai-research-env-gpu python scripts/gpu_smoke_test.py
