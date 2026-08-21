@@ -6,7 +6,7 @@ set -Eeuo pipefail
 #
 # The script is intentionally idempotent:
 #   1. Clone or fast-forward the repository to the requested branch.
-#   2. Reconcile ai-research-env-gpu only when conda-lock-gpu.yml changes.
+#   2. Recreate ai-research-env-gpu only when conda-lock-gpu.yml changes.
 #   3. Keep the micromamba environment in persistent EFabric home storage.
 #   4. Optionally install a Bash login hook that runs once per Workspace boot.
 #
@@ -212,8 +212,8 @@ CURRENT_COMMIT="$(git -C "${REPO_DIR}" rev-parse HEAD)"
 echo "ai-research-env commit: ${CURRENT_COMMIT}"
 
 # If the repository changed, restart using the just-pulled bootstrap script so
-# changes to bootstrap logic take effect immediately. This also makes the curl
-# bootstrap path converge onto the repository copy after cloning.
+# changes to bootstrap logic take effect immediately. This also makes a remote
+# bootstrap invocation converge onto the repository copy after cloning.
 if [[ "${REEXECUTED}" != "1" ]] && \
    [[ -f "${REPO_DIR}/scripts/bootstrap-efabric-gpu.sh" ]] && \
    [[ "${BEFORE_COMMIT}" != "${CURRENT_COMMIT}" ]]; then
@@ -229,7 +229,8 @@ fi
 
 LOCK_HASH="$(sha256sum "${LOCK_FILE}" | awk '{print $1}')"
 LOCK_MARKER="${STATE_DIR}/conda-lock-gpu.sha256"
-ENV_PYTHON="${MAMBA_ROOT_PREFIX}/envs/${ENV_NAME}/bin/python"
+ENV_PREFIX="${MAMBA_ROOT_PREFIX}/envs/${ENV_NAME}"
+ENV_PYTHON="${ENV_PREFIX}/bin/python"
 
 NEEDS_INSTALL=false
 if [[ "${FORCE_REINSTALL}" == true ]]; then
@@ -270,6 +271,14 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
     fi
   fi
 
+  # conda-lock installs through a `create` operation. Recreate the named
+  # environment when the canonical lock changes rather than relying on an
+  # in-place mutation, which keeps the resulting prefix exactly lock-derived.
+  if [[ -d "${ENV_PREFIX}" ]]; then
+    echo "Removing the previous ${ENV_NAME} before applying the new lock ..."
+    micromamba remove -y -n "${ENV_NAME}" --all
+  fi
+
   echo "Installing ${ENV_NAME} from the canonical GPU lock ..."
   micromamba run -n "${LOCK_TOOLS_ENV}" \
     conda-lock install \
@@ -305,8 +314,9 @@ fi
 
 echo
 echo "EFabric GPU bootstrap complete."
-echo "Repository: ${REPO_DIR}"
-echo "Commit:     ${CURRENT_COMMIT}"
+echo "Repository:  ${REPO_DIR}"
+echo "Commit:      ${CURRENT_COMMIT}"
+echo "Lock SHA256: ${LOCK_HASH}"
 echo "Environment: ${ENV_NAME}"
 echo
 echo "Run a command with:"
