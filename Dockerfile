@@ -1,6 +1,14 @@
-FROM mambaorg/micromamba:2.8.1
+FROM mambaorg/micromamba:2.8.1-debian12-slim
 
 WORKDIR /work
+
+# Git and Zsh are container-level tooling rather than scientific environment
+# dependencies. Keep environment.yml shell-neutral and cross-platform.
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git zsh && \
+    rm -rf /var/lib/apt/lists/*
+USER $MAMBA_USER
 
 # The canonical lockfile contains the complete multi-platform environment,
 # including both conda and PyPI dependencies.
@@ -14,13 +22,21 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER \
     scripts/smoke_test.py \
     /opt/ai-research-env/smoke_test.py
 
+# Install the interactive-shell and Jupyter terminal configuration.
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    config/zshrc \
+    /home/$MAMBA_USER/.zshrc
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    config/jupyter_server_config.py \
+    /opt/ai-research-env/jupyter/jupyter_server_config.py
+
 # Install conda-lock into the base environment, then use the same installation
 # mechanism validated by environment-install-check.
 RUN micromamba install \
       -y \
       -n base \
       -c conda-forge \
-      "conda-lock=3.*" && \
+      "conda-lock=3.0.4" && \
     micromamba run \
       -n base \
       conda-lock install \
@@ -30,9 +46,11 @@ RUN micromamba install \
     micromamba clean --all --yes && \
     rm -f /tmp/conda-lock.yml
 
-# Activate the research environment for container commands and startup.
+# The micromamba entrypoint activates ENV_NAME for normal container commands.
+# Zsh also activates this environment explicitly for interactive sessions.
 ENV ENV_NAME=ai-research-env
-ENV MAMBA_DOCKERFILE_ACTIVATE=1
+ENV SHELL=/bin/zsh
+ENV JUPYTER_CONFIG_DIR=/opt/ai-research-env/jupyter
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8888
