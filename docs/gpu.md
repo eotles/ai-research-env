@@ -63,11 +63,13 @@ docker run -it --rm \
   ghcr.io/eotles/ai-research-env:gpu
 ```
 
-## EFabric native GPU bootstrap
+## EFabric native GPU launcher
 
-EFabric Workspaces currently provide their own GPU base image and persistent home storage. The tested integration path is therefore to use EFabric's `gpu-base` Workflow Image and install the canonical `conda-lock-gpu.yml` environment into persistent home storage.
+EFabric Workspaces provide their own GPU base image and persistent home storage. The tested integration path is to use EFabric's `gpu-base` Workflow Image and install the canonical `conda-lock-gpu.yml` environment into persistent home storage.
 
 This keeps GitHub and `conda-lock-gpu.yml` as the source of truth while avoiding a second EFabric-specific dependency specification.
+
+Nothing is added to `~/.bashrc`, and nothing runs automatically at login. Updating and entering the environment is always an explicit user action.
 
 ### First-time setup
 
@@ -79,15 +81,9 @@ mkdir -p "$HOME/src"
 git clone \
   https://github.com/eotles/ai-research-env.git \
   "$HOME/src/ai-research-env"
-
-cd "$HOME/src/ai-research-env"
-
-bash scripts/bootstrap-efabric-gpu.sh \
-  --install-login-hook \
-  --smoke-test
 ```
 
-The bootstrap script uses persistent locations under your EFabric home directory:
+The repository and environment live in persistent EFabric home storage:
 
 ```text
 $HOME/src/ai-research-env
@@ -96,30 +92,29 @@ $HOME/.ai-research-env
 $HOME/.cache/matplotlib
 ```
 
-It also sets `MPLCONFIGDIR` explicitly because some EFabric Workspaces expose `$HOME/.config` as a non-writable file rather than a normal directory.
+`MPLCONFIGDIR` is set explicitly because some EFabric Workspaces expose `$HOME/.config` as a non-writable file rather than a normal directory.
 
-### Automatic latest-on-boot behavior
+### Start or update the environment
 
-`--install-login-hook` adds a small managed block to `~/.bashrc`.
-
-On the first interactive login to each new Workspace container, the hook:
-
-1. Fast-forwards the local `ai-research-env` checkout to the latest `origin/main`.
-2. Records the exact Git commit being used.
-3. Computes the SHA256 of `conda-lock-gpu.yml`.
-4. Leaves the existing GPU environment untouched when the lock is unchanged.
-5. Recreates `ai-research-env-gpu` from the new canonical lock when the lock changes.
-6. Runs `pip check` after an environment install or update.
-
-Additional shells in the same running Workspace skip the network/update work. A new Workspace boot triggers a fresh check.
-
-This makes interactive EFabric development track the latest canonical environment without paying the cost of reinstalling it on every login.
-
-To check for updates manually at any time:
+At the start of a Workspace session, run one command:
 
 ```bash
 bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh"
 ```
+
+Each explicit invocation:
+
+1. Fast-forwards the local `ai-research-env` checkout to the latest `origin/main`.
+2. Records the exact Git commit being used.
+3. Computes the SHA256 of `conda-lock-gpu.yml`.
+4. Leaves the existing persistent GPU environment untouched when the lock is unchanged.
+5. Recreates `ai-research-env-gpu` from the canonical lock when the lock changes.
+6. Runs `pip check` after an install or update.
+7. Starts an interactive Bash shell with `ai-research-env-gpu` activated.
+
+This provides an explicit "latest" workflow without hidden login-time behavior.
+
+When the lock has not changed, the command should mostly be a quick Git update check before entering the existing environment.
 
 To force a clean reinstall from the current lock:
 
@@ -128,27 +123,37 @@ bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh" \
   --force-reinstall
 ```
 
-To rerun full hardware qualification:
+To rerun full hardware qualification before entering the shell:
 
 ```bash
 bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh" \
   --smoke-test
 ```
 
-The bootstrap prints the exact repository commit and lock SHA256. Record those values for research runs where provenance matters. Automatic `main` tracking is convenient for interactive development, while a recorded commit and lock hash provide the reproducibility boundary for an experiment.
-
-### Running commands
-
-The environment can be used without shell activation:
+To update/reconcile the environment without launching an interactive shell:
 
 ```bash
-export MAMBA_ROOT_PREFIX="$HOME/.micromamba"
-
-micromamba run -n ai-research-env-gpu \
-  python your_script.py
+bash "$HOME/src/ai-research-env/scripts/bootstrap-efabric-gpu.sh" \
+  --no-shell
 ```
 
-The login hook persists `MAMBA_ROOT_PREFIX` and `MPLCONFIGDIR` for interactive Bash sessions.
+The launcher prints the exact repository commit and lock SHA256. Record those values for research runs where provenance matters.
+
+Inside the launched shell, the environment is already activated and regular commands can be used directly:
+
+```bash
+python your_script.py
+jupyter lab
+```
+
+The launcher also exports:
+
+```text
+AI_RESEARCH_ENV_COMMIT
+AI_RESEARCH_ENV_LOCK_SHA256
+```
+
+so the running shell retains the exact repository and lock provenance.
 
 ## GPU qualification
 
@@ -188,7 +193,7 @@ This additionally requires and exercises:
 - a small Hugging Face Transformers model forward pass on CUDA
 - finite model outputs
 
-The EFabric bootstrap's `--smoke-test` option runs both the general environment smoke test and this real-GPU qualification.
+The EFabric launcher's `--smoke-test` option runs both the general environment smoke test and this real-GPU qualification.
 
 ## Manual native installation
 
