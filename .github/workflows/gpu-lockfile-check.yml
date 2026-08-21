@@ -30,7 +30,13 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          echo "CANDIDATE_LOCK=${RUNNER_TEMP}/candidate-conda-lock-gpu.yml" >> "${GITHUB_ENV}"
+
+          # Keep the candidate beside the canonical lock. conda-lock records
+          # source paths relative to the generated lockfile, so generating in
+          # RUNNER_TEMP makes an otherwise identical lock differ only in
+          # metadata. Using the workspace makes byte-for-byte comparison valid.
+          echo "CANDIDATE_LOCK=${GITHUB_WORKSPACE}/candidate-conda-lock-gpu.yml" \
+            >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
         uses: mamba-org/setup-micromamba@v3
@@ -88,6 +94,6 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: candidate-conda-lock-gpu-${{ github.run_id }}
-          path: ${{ runner.temp }}/candidate-conda-lock-gpu.yml
+          path: ${{ github.workspace }}/candidate-conda-lock-gpu.yml
           if-no-files-found: ignore
           retention-days: 14
