@@ -2,20 +2,17 @@
 
 set -Eeuo pipefail
 
-# Bootstrap the canonical ai-research-env GPU environment on EFabric.
+# Manually bootstrap/update and enter the canonical ai-research-env GPU
+# environment on an EFabric Workspace.
 #
-# The script is intentionally idempotent:
-#   1. Clone or fast-forward the repository to the requested branch.
-#   2. Recreate ai-research-env-gpu only when conda-lock-gpu.yml changes.
-#   3. Keep the micromamba environment in persistent EFabric home storage.
-#   4. Optionally install a Bash login hook that runs once per Workspace boot.
+# Each invocation:
+#   1. Clones or fast-forwards ai-research-env to the requested branch.
+#   2. Reconciles ai-research-env-gpu only when conda-lock-gpu.yml changes.
+#   3. Keeps the micromamba environment in persistent EFabric home storage.
+#   4. Starts an interactive Bash shell with the GPU environment activated.
 #
-# Typical first-time EFabric use:
-#
-#   bash scripts/bootstrap-efabric-gpu.sh --install-login-hook --smoke-test
-#
-# Future interactive Workspace boots can then update automatically through the
-# installed ~/.bashrc hook. A manual invocation always checks for updates.
+# Nothing is installed into shell startup files and nothing runs automatically
+# at login. The user explicitly launches the environment with this script.
 
 REPO_URL="${AI_RESEARCH_ENV_REPO_URL:-https://github.com/eotles/ai-research-env.git}"
 REPO_DIR="${AI_RESEARCH_ENV_REPO_DIR:-${HOME}/src/ai-research-env}"
@@ -27,11 +24,11 @@ STATE_DIR="${AI_RESEARCH_ENV_STATE_DIR:-${HOME}/.ai-research-env}"
 export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-${HOME}/.micromamba}"
 export MPLCONFIGDIR="${MPLCONFIGDIR:-${HOME}/.cache/matplotlib}"
 
-LOGIN_MODE=false
-INSTALL_LOGIN_HOOK=false
 FORCE_REINSTALL=false
 RUN_SMOKE_TEST=false
+NO_SHELL=false
 REEXECUTED="${AI_RESEARCH_ENV_BOOTSTRAP_REEXEC:-0}"
+START_DIR="${AI_RESEARCH_ENV_START_DIR:-${PWD}}"
 
 ORIGINAL_ARGS=("$@")
 
@@ -39,15 +36,15 @@ usage() {
   cat <<'EOF'
 Usage: bootstrap-efabric-gpu.sh [options]
 
-Bootstrap or update ai-research-env on an EFabric GPU Workspace.
+Update ai-research-env, reconcile the canonical GPU environment, and launch an
+interactive Bash shell with that environment activated.
 
 Options:
-  --install-login-hook  Add a ~/.bashrc hook that updates once per Workspace boot.
-  --login               Internal lightweight mode used by the login hook.
-  --force-reinstall     Reinstall the GPU environment even if the lock hash matches.
-  --smoke-test          Run the general and real-GPU smoke tests after bootstrap.
-  --branch NAME         Track a branch other than main.
-  -h, --help            Show this help.
+  --force-reinstall  Recreate the GPU environment even if the lock hash matches.
+  --smoke-test       Run the general and real-GPU smoke tests before launching.
+  --no-shell         Update/reconcile the environment, then exit without a shell.
+  --branch NAME      Track a branch other than main.
+  -h, --help         Show this help.
 
 Environment overrides:
   AI_RESEARCH_ENV_REPO_URL
@@ -56,6 +53,7 @@ Environment overrides:
   AI_RESEARCH_ENV_GPU_ENV_NAME
   AI_RESEARCH_ENV_LOCK_TOOLS_ENV_NAME
   AI_RESEARCH_ENV_STATE_DIR
+  AI_RESEARCH_ENV_START_DIR
   MAMBA_ROOT_PREFIX
   MPLCONFIGDIR
 EOF
@@ -63,20 +61,16 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --install-login-hook)
-      INSTALL_LOGIN_HOOK=true
-      shift
-      ;;
-    --login)
-      LOGIN_MODE=true
-      shift
-      ;;
     --force-reinstall)
       FORCE_REINSTALL=true
       shift
       ;;
     --smoke-test)
       RUN_SMOKE_TEST=true
+      shift
+      ;;
+    --no-shell)
+      NO_SHELL=true
       shift
       ;;
     --branch)
@@ -107,77 +101,12 @@ require_command() {
   fi
 }
 
-workspace_session_id() {
-  local pid1_start="unknown"
-
-  if [[ -r /proc/1/stat ]]; then
-    pid1_start="$(awk '{print $22}' /proc/1/stat 2>/dev/null || true)"
-    pid1_start="${pid1_start:-unknown}"
-  fi
-
-  printf '%s:%s\n' "$(hostname)" "${pid1_start}"
-}
-
-write_login_hook() {
-  local login_hook="${STATE_DIR}/efabric-login.sh"
-  local bashrc="${HOME}/.bashrc"
-  local begin_marker="# >>> ai-research-env EFabric bootstrap >>>"
-  local end_marker="# <<< ai-research-env EFabric bootstrap <<<"
-
-  mkdir -p "${STATE_DIR}" "${MPLCONFIGDIR}"
-
-  cat > "${login_hook}" <<'EOF'
-# Managed by ai-research-env/scripts/bootstrap-efabric-gpu.sh.
-export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-$HOME/.micromamba}"
-export MPLCONFIGDIR="${MPLCONFIGDIR:-$HOME/.cache/matplotlib}"
-
-_ai_research_env_repo="${AI_RESEARCH_ENV_REPO_DIR:-$HOME/src/ai-research-env}"
-_ai_research_env_bootstrap="${_ai_research_env_repo}/scripts/bootstrap-efabric-gpu.sh"
-
-if [[ -f "${_ai_research_env_bootstrap}" ]]; then
-  bash "${_ai_research_env_bootstrap}" --login || \
-    echo "Warning: ai-research-env EFabric bootstrap failed; continuing with the shell." >&2
-fi
-
-unset _ai_research_env_repo _ai_research_env_bootstrap
-EOF
-
-  touch "${bashrc}"
-
-  if ! grep -Fq "${begin_marker}" "${bashrc}"; then
-    cat >> "${bashrc}" <<EOF
-
-${begin_marker}
-if [[ -f "\$HOME/.ai-research-env/efabric-login.sh" ]]; then
-  source "\$HOME/.ai-research-env/efabric-login.sh"
-fi
-${end_marker}
-EOF
-  fi
-
-  echo "Installed EFabric login hook in ${bashrc}."
-  echo "Future interactive Workspace sessions will check for updates once per Workspace boot."
-}
-
 require_command git
 require_command micromamba
 require_command sha256sum
 require_command awk
-require_command hostname
 
 mkdir -p "${STATE_DIR}" "${MPLCONFIGDIR}" "$(dirname "${REPO_DIR}")"
-
-SESSION_ID="$(workspace_session_id)"
-SESSION_MARKER="${STATE_DIR}/last-workspace-session"
-
-# The login hook should be nearly free after the first login in the same
-# Workspace container. Manual invocations intentionally bypass this shortcut.
-if [[ "${LOGIN_MODE}" == true && "${FORCE_REINSTALL}" == false ]]; then
-  if [[ -f "${SESSION_MARKER}" ]] && \
-     [[ "$(cat "${SESSION_MARKER}")" == "${SESSION_ID}" ]]; then
-    exit 0
-  fi
-fi
 
 BEFORE_COMMIT=""
 if [[ -d "${REPO_DIR}/.git" ]]; then
@@ -211,13 +140,14 @@ fi
 CURRENT_COMMIT="$(git -C "${REPO_DIR}" rev-parse HEAD)"
 echo "ai-research-env commit: ${CURRENT_COMMIT}"
 
-# If the repository changed, restart using the just-pulled bootstrap script so
-# changes to bootstrap logic take effect immediately. This also makes a remote
-# bootstrap invocation converge onto the repository copy after cloning.
+# If the repository changed, restart with the just-pulled version of this script
+# so updates to bootstrap logic take effect immediately.
 if [[ "${REEXECUTED}" != "1" ]] && \
    [[ -f "${REPO_DIR}/scripts/bootstrap-efabric-gpu.sh" ]] && \
    [[ "${BEFORE_COMMIT}" != "${CURRENT_COMMIT}" ]]; then
-  exec env AI_RESEARCH_ENV_BOOTSTRAP_REEXEC=1 \
+  exec env \
+    AI_RESEARCH_ENV_BOOTSTRAP_REEXEC=1 \
+    AI_RESEARCH_ENV_START_DIR="${START_DIR}" \
     bash "${REPO_DIR}/scripts/bootstrap-efabric-gpu.sh" "${ORIGINAL_ARGS[@]}"
 fi
 
@@ -271,9 +201,6 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
     fi
   fi
 
-  # conda-lock installs through a `create` operation. Recreate the named
-  # environment when the canonical lock changes rather than relying on an
-  # in-place mutation, which keeps the resulting prefix exactly lock-derived.
   if [[ -d "${ENV_PREFIX}" ]]; then
     echo "Removing the previous ${ENV_NAME} before applying the new lock ..."
     micromamba remove -y -n "${ENV_NAME}" --all
@@ -296,11 +223,6 @@ else
 fi
 
 printf '%s\n' "${CURRENT_COMMIT}" > "${STATE_DIR}/repo-commit"
-printf '%s\n' "${SESSION_ID}" > "${SESSION_MARKER}"
-
-if [[ "${INSTALL_LOGIN_HOOK}" == true ]]; then
-  write_login_hook
-fi
 
 if [[ "${RUN_SMOKE_TEST}" == true ]]; then
   echo "Running general environment smoke test ..."
@@ -313,11 +235,30 @@ if [[ "${RUN_SMOKE_TEST}" == true ]]; then
 fi
 
 echo
-echo "EFabric GPU bootstrap complete."
+echo "EFabric GPU environment ready."
 echo "Repository:  ${REPO_DIR}"
 echo "Commit:      ${CURRENT_COMMIT}"
 echo "Lock SHA256: ${LOCK_HASH}"
 echo "Environment: ${ENV_NAME}"
+
+if [[ "${NO_SHELL}" == true ]]; then
+  exit 0
+fi
+
+if [[ -d "${START_DIR}" ]]; then
+  cd "${START_DIR}"
+else
+  cd "${HOME}"
+fi
+
+export AI_RESEARCH_ENV_COMMIT="${CURRENT_COMMIT}"
+export AI_RESEARCH_ENV_LOCK_SHA256="${LOCK_HASH}"
+
+# Activate in this process, then replace it with the user's interactive Bash
+# shell. No shell startup file is modified.
+eval "$(micromamba shell hook --shell bash)"
+micromamba activate "${ENV_NAME}"
+
 echo
-echo "Run a command with:"
-echo "  micromamba run -n ${ENV_NAME} python your_script.py"
+echo "Starting interactive Bash with ${ENV_NAME} activated."
+exec bash -i
