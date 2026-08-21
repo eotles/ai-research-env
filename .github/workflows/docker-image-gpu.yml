@@ -1,0 +1,164 @@
+name: docker-image-gpu
+
+on:
+  pull_request:
+    paths:
+      - conda-lock-gpu.yml
+      - Dockerfile.gpu
+      - config/**
+      - scripts/smoke_test.py
+      - scripts/gpu_smoke_test.py
+      - .github/workflows/docker-image-gpu.yml
+
+  push:
+    branches:
+      - main
+    paths:
+      - conda-lock-gpu.yml
+      - Dockerfile.gpu
+      - config/**
+      - scripts/smoke_test.py
+      - scripts/gpu_smoke_test.py
+      - .github/workflows/docker-image-gpu.yml
+
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: "Publish the GPU image to GHCR after tests pass"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-image-gpu-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-image:
+    name: Test linux/amd64 CUDA image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build GPU test image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.gpu
+          load: true
+          push: false
+          platforms: linux/amd64
+          tags: ai-research-env:gpu-test
+          cache-from: type=gha,scope=docker-gpu-test-amd64
+          cache-to: type=gha,mode=max,scope=docker-gpu-test-amd64
+
+      - name: Validate Python dependency consistency
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker run --rm ai-research-env:gpu-test python -m pip check
+
+      - name: Run general environment smoke test
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker run --rm ai-research-env:gpu-test \
+            python /opt/ai-research-env/smoke_test.py
+
+      - name: Validate CUDA-enabled PyTorch build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker run --rm ai-research-env:gpu-test \
+            python /opt/ai-research-env/gpu_smoke_test.py
+
+      - name: Validate Git and Zsh terminal environment
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          docker run \
+            --rm \
+            ai-research-env:gpu-test \
+            zsh -lic '
+              set -e
+              echo "SHELL=$SHELL"
+              echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-}"
+              test "$SHELL" = /bin/zsh
+              test "$CONDA_DEFAULT_ENV" = ai-research-env-gpu
+              command -v zsh
+              zsh --version
+              command -v git
+              git --version
+              command -v python
+              python --version
+              test -f "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F shell_command "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F /bin/zsh "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+            '
+
+      - name: Validate Jupyter
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker run --rm ai-research-env:gpu-test jupyter lab --version
+
+  publish-image:
+    name: Publish GPU image
+    needs:
+      - test-image
+
+    if: >
+      github.event_name == 'push' ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.push_image
+      )
+
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=gpu
+            type=sha,prefix=gpu-sha-
+
+      - name: Build and push GPU image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.gpu
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=docker-gpu-publish-amd64
+          cache-to: type=gha,mode=max,scope=docker-gpu-publish-amd64
