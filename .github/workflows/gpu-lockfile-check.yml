@@ -1,0 +1,99 @@
+name: gpu-lockfile-check
+
+on:
+  pull_request:
+    paths:
+      - environment-gpu.yml
+      - conda-lock-gpu.yml
+      - scripts/generate-gpu-lockfile.sh
+      - .github/workflows/gpu-lockfile-check.yml
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gpu-lockfile-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Configure runtime paths
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          # Keep the candidate beside the canonical lock. conda-lock records
+          # source paths relative to the generated lockfile, so generating in
+          # RUNNER_TEMP makes an otherwise identical lock differ only in
+          # metadata. Using the workspace makes byte-for-byte comparison valid.
+          echo "CANDIDATE_LOCK=${GITHUB_WORKSPACE}/candidate-conda-lock-gpu.yml" \
+            >> "${GITHUB_ENV}"
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          micromamba-version: "2.8.1-0"
+          cache-downloads: true
+
+      - name: Install conda-lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          micromamba install \
+            -y \
+            -n base \
+            -c conda-forge \
+            "conda-lock=3.0.4"
+
+      - name: Generate candidate GPU lock
+        shell: bash
+        env:
+          CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
+        run: |
+          set -Eeuo pipefail
+          bash scripts/generate-gpu-lockfile.sh "${CANDIDATE_LOCK}"
+
+      - name: Validate CUDA packages in candidate lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          grep -F "name: pytorch-cuda" "${CANDIDATE_LOCK}"
+          grep -F "version: '12.4'" "${CANDIDATE_LOCK}" || \
+            grep -F 'version: "12.4"' "${CANDIDATE_LOCK}" || \
+            grep -F "version: 12.4" "${CANDIDATE_LOCK}"
+
+      - name: Compare canonical GPU lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ ! -f conda-lock-gpu.yml ]]; then
+            echo "::error::conda-lock-gpu.yml is missing."
+            exit 1
+          fi
+
+          if ! cmp -s conda-lock-gpu.yml "${CANDIDATE_LOCK}"; then
+            echo "::error::GPU lockfile drift detected. Regenerate conda-lock-gpu.yml."
+            diff --brief conda-lock-gpu.yml "${CANDIDATE_LOCK}" || true
+            exit 1
+          fi
+
+          echo "Fresh GPU solve matches conda-lock-gpu.yml."
+
+      - name: Upload candidate GPU lock
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: candidate-conda-lock-gpu-${{ github.run_id }}
+          path: ${{ github.workspace }}/candidate-conda-lock-gpu.yml
+          if-no-files-found: ignore
+          retention-days: 14
