@@ -5,6 +5,11 @@ set -Eeuo pipefail
 # Manually bootstrap/update and enter the canonical ai-research-env GPU
 # environment on an EFabric Workspace.
 #
+# Recommended invocation:
+#
+#   bash <(curl -fsSL \
+#     https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-gpu.sh)
+#
 # Each invocation:
 #   1. Clones or fast-forwards ai-research-env to the requested branch.
 #   2. Reconciles ai-research-env-gpu only when conda-lock-gpu.yml changes.
