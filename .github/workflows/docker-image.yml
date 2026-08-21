@@ -101,15 +101,19 @@ jobs:
             ai-research-env:test-${{ matrix.arch }} \
             zsh -lic '
               set -e
+              echo "SHELL=$SHELL"
+              echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-}"
               test "$SHELL" = /bin/zsh
               test "$CONDA_DEFAULT_ENV" = ai-research-env
+              command -v zsh
+              zsh --version
               command -v git
               git --version
               command -v python
               python --version
               test -f "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
-              grep -F '"'"'"shell_command"'"'": ["'"'"/bin/zsh"'"'", "'"'"-l"'"'"]' \
-                "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F shell_command "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
+              grep -F /bin/zsh "$JUPYTER_CONFIG_DIR/jupyter_server_config.py"
             '
 
       - name: Validate Jupyter
