@@ -9,6 +9,10 @@ on:
       - scripts/generate-gpu-lockfile.sh
       - .github/workflows/gpu-lock-bootstrap.yml
 
+  # Keep a manual escape hatch while bootstrapping the first canonical GPU lock.
+  # This workflow is temporary and will be removed before the GPU PR is merged.
+  workflow_dispatch:
+
 permissions:
   contents: write
 
@@ -63,7 +67,8 @@ jobs:
           fi
 
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email \
+            "github-actions[bot]@users.noreply.github.com"
           git add conda-lock-gpu.yml
           git commit -m "Add canonical GPU conda lockfile"
           git push
