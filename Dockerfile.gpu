@@ -1,0 +1,59 @@
+FROM mambaorg/micromamba:2.8.1-debian12-slim
+
+WORKDIR /work
+
+# Match the interactive tooling provided by the portable CPU image.
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git zsh && \
+    rm -rf /var/lib/apt/lists/*
+USER $MAMBA_USER
+
+# The GPU lock is intentionally Linux x86-64 only and contains the CUDA 12.4
+# PyTorch runtime. Host NVIDIA drivers are supplied by the GPU runtime (for
+# example Docker --gpus all or EFabric's GPU container integration).
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    conda-lock-gpu.yml \
+    /tmp/conda-lock-gpu.yml
+
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    scripts/smoke_test.py \
+    /opt/ai-research-env/smoke_test.py
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    scripts/gpu_smoke_test.py \
+    /opt/ai-research-env/gpu_smoke_test.py
+
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    config/zshrc \
+    /home/$MAMBA_USER/.zshrc
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    config/jupyter_server_config.py \
+    /opt/ai-research-env/jupyter/jupyter_server_config.py
+
+RUN micromamba install \
+      -y \
+      -n base \
+      -c conda-forge \
+      "conda-lock=3.0.4" && \
+    micromamba run \
+      -n base \
+      conda-lock install \
+      --conda "$(command -v micromamba)" \
+      --name ai-research-env-gpu \
+      /tmp/conda-lock-gpu.yml && \
+    micromamba clean --all --yes && \
+    rm -f /tmp/conda-lock-gpu.yml
+
+ENV ENV_NAME=ai-research-env-gpu
+ENV SHELL=/bin/zsh
+ENV JUPYTER_CONFIG_DIR=/opt/ai-research-env/jupyter
+ENV PYTHONUNBUFFERED=1
+
+# Standard NVIDIA container runtime metadata. The actual driver/device is
+# provided by the host, not baked into this image.
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+EXPOSE 8888
+
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/work"]
