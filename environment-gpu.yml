@@ -3,6 +3,8 @@
 # This intentionally mirrors environment.yml as closely as possible while
 # replacing the CPU-only PyTorch runtime with the tested CUDA 12.4 stack.
 # Keep the portable CPU environment as the default cross-platform target.
+# The target includes the CUDA runtime needed by PyTorch, but not nvcc or a
+# general-purpose CUDA compiler toolchain.
 
 name: ai-research-env-gpu
 
