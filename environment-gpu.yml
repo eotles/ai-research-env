@@ -1,0 +1,125 @@
+# Linux x86-64 CUDA environment for GPU-backed research compute.
+#
+# This intentionally mirrors environment.yml as closely as possible while
+# replacing the CPU-only PyTorch runtime with the tested CUDA 12.4 stack.
+# Keep the portable CPU environment as the default cross-platform target.
+
+name: ai-research-env-gpu
+
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+channel_priority: strict
+
+dependencies:
+  # ---------------------------------------------------------------------------
+  # Runtime
+  # ---------------------------------------------------------------------------
+  - python=3.12
+  - openjdk=25
+  - pip
+
+  # ---------------------------------------------------------------------------
+  # Core scientific Python
+  # ---------------------------------------------------------------------------
+  - numpy=1.26.4
+  - pandas
+  - scipy
+  - scikit-learn
+  - sympy=1.13.1
+
+  # ---------------------------------------------------------------------------
+  # Visualization and notebooks
+  # ---------------------------------------------------------------------------
+  - matplotlib
+  - jupyterlab
+  - ipykernel
+  - ipywidgets
+  - tensorboard
+
+  # ---------------------------------------------------------------------------
+  # General utilities and configuration
+  # ---------------------------------------------------------------------------
+  - tqdm
+  - rich
+  - pyyaml
+  - pydantic
+  - python-dotenv
+  - requests
+  - typer
+  - joblib
+
+  # Configuration framework used heavily by the MEDS ecosystem
+  - hydra-core
+  - omegaconf
+
+  # ---------------------------------------------------------------------------
+  # Data I/O and local analytics
+  # ---------------------------------------------------------------------------
+  - pyarrow
+  - duckdb
+  - polars
+  - h5py
+
+  # ---------------------------------------------------------------------------
+  # Performance
+  # ---------------------------------------------------------------------------
+  - numba
+
+  # ---------------------------------------------------------------------------
+  # Development and testing
+  # ---------------------------------------------------------------------------
+  - pytest
+  - pytest-cov
+  - pytest-timeout
+  - ruff
+  - mypy
+  - pre-commit
+
+  # ---------------------------------------------------------------------------
+  # PyTorch CUDA stack
+  #
+  # PyTorch's official 2.5.1 installation instructions pair this release with
+  # pytorch-cuda=12.4 from the pytorch + nvidia channels on Linux/Windows.
+  # This exact stack has also been exercised on EFabric RTX A5000 hardware.
+  # ---------------------------------------------------------------------------
+  - pytorch=2.5.1
+  - torchvision=0.20.1
+  - torchaudio=2.5.1
+  - pytorch-cuda=12.4
+
+  # ---------------------------------------------------------------------------
+  # Foundation-model training and model infrastructure
+  # ---------------------------------------------------------------------------
+  - transformers=4.48.3
+  - accelerate
+  - lightning=2.5.*
+  - torchmetrics
+  - safetensors
+  - einops
+
+  # ---------------------------------------------------------------------------
+  # TensorFlow
+  #
+  # Preserve the general-purpose CPU TensorFlow stack from the portable
+  # environment. The GPU target is currently qualified around PyTorch, not
+  # TensorFlow GPU execution.
+  # ---------------------------------------------------------------------------
+  - tensorflow=2.18.*
+
+  # ---------------------------------------------------------------------------
+  # MEDS ecosystem
+  # ---------------------------------------------------------------------------
+  - pip:
+      - "meds>=0.4.1,<0.5"
+      - "MEDS-transforms>=0.6.7,<0.7"
+      - "MEDS-extract[local_parallelism]>=0.6,<0.7"
+      - "MEDS-trajectory-evaluation"
+
+# CUDA image target. EFabric GPU workers are Linux x86-64, so the GPU lock is
+# intentionally independent from the portable five-platform CPU lock.
+platforms:
+  - linux-64
