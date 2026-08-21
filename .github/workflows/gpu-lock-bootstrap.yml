@@ -1,0 +1,69 @@
+name: gpu-lock-bootstrap
+
+on:
+  push:
+    branches:
+      - chatgpt/gpu-efabric-support
+    paths:
+      - environment-gpu.yml
+      - scripts/generate-gpu-lockfile.sh
+      - .github/workflows/gpu-lock-bootstrap.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gpu-lock-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          micromamba-version: "2.8.1-0"
+          cache-downloads: true
+
+      - name: Install conda-lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          micromamba install \
+            -y \
+            -n base \
+            -c conda-forge \
+            "conda-lock=3.0.4"
+
+      - name: Generate GPU lockfile
+        shell: bash
+        env:
+          CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
+        run: |
+          set -Eeuo pipefail
+          bash scripts/generate-gpu-lockfile.sh conda-lock-gpu.yml
+
+      - name: Commit GPU lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if git diff --quiet -- conda-lock-gpu.yml && \
+             git ls-files --error-unmatch conda-lock-gpu.yml >/dev/null 2>&1; then
+            echo "GPU lockfile is already current."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add conda-lock-gpu.yml
+          git commit -m "Add canonical GPU conda lockfile"
+          git push
