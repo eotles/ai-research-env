@@ -91,6 +91,21 @@ jobs:
             ai-research-env:test-${{ matrix.arch }} \
             python /opt/ai-research-env/smoke_test.py
 
+      - name: Validate GNU time
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          docker run \
+            --rm \
+            ai-research-env:test-${{ matrix.arch }} \
+            /usr/bin/time --version
+
+          docker run \
+            --rm \
+            ai-research-env:test-${{ matrix.arch }} \
+            /usr/bin/time -v true
+
       - name: Validate Git and Zsh terminal environment
         shell: bash
         run: |
@@ -121,10 +136,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          docker run \
-            --rm \
-            ai-research-env:test-${{ matrix.arch }} \
-            jupyter lab --version
+          docker run --rm ai-research-env:test-${{ matrix.arch }} jupyter lab --version
 
   publish-image:
     name: Publish multi-architecture image
