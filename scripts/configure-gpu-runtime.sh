@@ -14,11 +14,6 @@ if ! command -v micromamba >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! micromamba env list | awk 'NR > 1 {print $1}' | grep -Fxq "${ENV_NAME}"; then
-  echo "Error: micromamba environment not found: ${ENV_NAME}" >&2
-  exit 1
-fi
-
 echo "Configuring PyTorch-first Transformers defaults for ${ENV_NAME} ..."
 micromamba env config vars set \
   -n "${ENV_NAME}" \
