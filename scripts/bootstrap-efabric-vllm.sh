@@ -13,6 +13,7 @@ VENV_DIR="${AI_RESEARCH_ENV_VLLM_VENV_DIR:-${HOME}/.venvs/ai-research-env-vllm}"
 STATE_DIR="${AI_RESEARCH_ENV_STATE_DIR:-${HOME}/.ai-research-env}"
 START_DIR="${AI_RESEARCH_ENV_START_DIR:-${PWD}}"
 REEXECUTED="${AI_RESEARCH_ENV_VLLM_BOOTSTRAP_REEXEC:-0}"
+BOOTSTRAP_START="${SECONDS}"
 
 FORCE_REINSTALL=false
 RUN_SMOKE_TEST=false
@@ -108,7 +109,9 @@ if [[ -d "${REPO_DIR}/.git" ]]; then
   BEFORE_COMMIT="$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
 fi
 
-if [[ ! -d "${REPO_DIR}/.git" ]]; then
+if [[ "${REEXECUTED}" == "1" ]] && [[ -d "${REPO_DIR}/.git" ]]; then
+  echo "Using the checkout updated by the bootstrap re-exec."
+elif [[ ! -d "${REPO_DIR}/.git" ]]; then
   echo "Cloning ai-research-env (${BRANCH}) into ${REPO_DIR} ..."
   git clone --branch "${BRANCH}" --single-branch "${REPO_URL}" "${REPO_DIR}"
 else
@@ -140,17 +143,17 @@ if [[ "${REEXECUTED}" != "1" ]] && \
     bash "${REPO_DIR}/scripts/bootstrap-efabric-vllm.sh" "${ORIGINAL_ARGS[@]}"
 fi
 
-CONFIG_FILE="${REPO_DIR}/config/vllm.env"
+CONFIG_FILE="${REPO_DIR}/vllm-runtime.env"
 if [[ ! -f "${CONFIG_FILE}" ]]; then
   echo "Error: vLLM configuration not found: ${CONFIG_FILE}" >&2
   exit 1
 fi
 
-# shellcheck source=config/vllm.env
+# shellcheck source=../vllm-runtime.env
 source "${CONFIG_FILE}"
 
-: "${VLLM_VERSION:?VLLM_VERSION must be set in config/vllm.env}"
-: "${VLLM_PYTHON:?VLLM_PYTHON must be set in config/vllm.env}"
+: "${VLLM_VERSION:?VLLM_VERSION must be set in vllm-runtime.env}"
+: "${VLLM_PYTHON:?VLLM_PYTHON must be set in vllm-runtime.env}"
 
 SPEC_HASH="$(sha256sum "${CONFIG_FILE}" | awk '{print $1}')"
 SPEC_MARKER="${STATE_DIR}/vllm-spec.sha256"
@@ -168,6 +171,7 @@ elif [[ "$(cat "${SPEC_MARKER}")" != "${SPEC_HASH}" ]]; then
 fi
 
 if [[ "${NEEDS_INSTALL}" == true ]]; then
+  INSTALL_START="${SECONDS}"
   echo "Installing isolated vLLM ${VLLM_VERSION} runtime ..."
   rm -rf "${VENV_DIR}"
 
@@ -188,9 +192,10 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
     "${VENV_PYTHON}" "${REPO_DIR}/scripts/vllm_smoke_test.py"
 
   printf '%s\n' "${SPEC_HASH}" > "${SPEC_MARKER}"
-  echo "vLLM companion runtime now matches config/vllm.env."
+  echo "vLLM companion runtime now matches vllm-runtime.env."
+  echo "vLLM install time: $((SECONDS - INSTALL_START)) seconds"
 else
-  echo "vLLM companion runtime already matches config/vllm.env."
+  echo "vLLM companion runtime already matches vllm-runtime.env."
 fi
 
 if [[ "${RUN_SMOKE_TEST}" == true ]]; then
@@ -213,6 +218,7 @@ echo "Repository:   ${REPO_DIR}"
 echo "Commit:       ${CURRENT_COMMIT}"
 echo "vLLM:        ${VLLM_VERSION}"
 echo "Environment: ${VENV_DIR}"
+echo "Bootstrap time: $((SECONDS - BOOTSTRAP_START)) seconds"
 
 if [[ "${NO_SHELL}" == true ]]; then
   exit 0
