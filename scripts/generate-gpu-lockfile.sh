@@ -80,8 +80,8 @@ if ! "${MAMBA_EXE}" run -n base conda-lock --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# Always process the working lock beside the canonical lock. Existing lock source
-# metadata is relative to that location, while OUTPUT_FILE may be a CI artifact
+# Always process the working lock beside the canonical lock. conda-lock records
+# source paths relative to the lockfile, while OUTPUT_FILE may be a CI artifact
 # path elsewhere on disk.
 CANONICAL_DIR="$(
   cd "$(dirname "${CANONICAL_LOCK}")"
@@ -95,16 +95,37 @@ cleanup() {
 }
 trap cleanup EXIT
 
+normalize_seed_source() {
+  local lock_file="$1"
+  local source_name="$2"
+
+  python - "${lock_file}" "${source_name}" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+source_name = sys.argv[2]
+text = path.read_text()
+pattern = re.compile(r"(?m)^  sources:\n(?:  - .*\n)+")
+replacement = f"  sources:\n  - {source_name}\n"
+updated, count = pattern.subn(replacement, text, count=1)
+if count != 1:
+    raise SystemExit("Could not normalize metadata.sources in seeded lockfile")
+path.write_text(updated)
+PY
+}
+
 echo "Environment file: ${ENVIRONMENT_FILE}"
 echo "Output lockfile:  ${OUTPUT_FILE}"
 echo "Conda executable: ${MAMBA_EXE}"
 
-source_args=(--file "${ENVIRONMENT_FILE}")
 if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
   cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
-  # Let conda-lock read the source path already recorded by the canonical lock,
-  # which preserves its source metadata spelling and existing package solution.
-  source_args=()
+  # Historical lockfiles may contain source paths that reflect the directory in
+  # which they were originally generated. Normalize that metadata before using
+  # the old lock as package constraints, then parse the current source explicitly.
+  normalize_seed_source "${TEMP_FILE}" "environment-gpu.yml"
   echo "Lock strategy:    preserve existing compatible package solutions"
 else
   echo "Lock strategy:    fresh solve"
@@ -115,7 +136,7 @@ fi
 "${MAMBA_EXE}" run -n base conda-lock \
   --conda "${MAMBA_EXE}" \
   --log-level INFO \
-  "${source_args[@]}" \
+  --file "${ENVIRONMENT_FILE}" \
   --kind lock \
   --lockfile "${TEMP_FILE}"
 
