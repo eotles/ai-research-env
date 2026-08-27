@@ -31,10 +31,6 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          # Keep the candidate beside the canonical lock. conda-lock records
-          # source paths relative to the generated lockfile, so generating in
-          # RUNNER_TEMP makes an otherwise identical lock differ only in
-          # metadata. Using the workspace makes byte-for-byte comparison valid.
           echo "CANDIDATE_LOCK=${GITHUB_WORKSPACE}/candidate-conda-lock-gpu.yml" \
             >> "${GITHUB_ENV}"
 
@@ -81,13 +77,42 @@ jobs:
             exit 1
           fi
 
-          if ! cmp -s conda-lock-gpu.yml "${CANDIDATE_LOCK}"; then
-            echo "::error::GPU lockfile drift detected. Regenerate conda-lock-gpu.yml."
-            diff --brief conda-lock-gpu.yml "${CANDIDATE_LOCK}" || true
-            exit 1
-          fi
+          # Older canonical locks may contain generation-directory paths in
+          # instructional comments and metadata.sources. Normalize both files
+          # before comparison so CI checks dependency/package drift, not legacy
+          # path spelling. New generator output is already canonicalized.
+          python - conda-lock-gpu.yml "${CANDIDATE_LOCK}" <<'PY'
+          from pathlib import Path
+          import re
+          import sys
 
-          echo "Fresh GPU solve matches conda-lock-gpu.yml."
+          def normalize(path: Path) -> str:
+              text = path.read_text()
+              text = re.sub(
+                  r"(?m)^  sources:\n(?:  - .*\n)+",
+                  "  sources:\n  - environment-gpu.yml\n",
+                  text,
+                  count=1,
+              )
+              text = re.sub(
+                  r"(?m)^#     conda-lock -f .*environment-gpu\.yml --lockfile conda-lock-gpu\.yml$",
+                  "#     conda-lock -f environment-gpu.yml --lockfile conda-lock-gpu.yml",
+                  text,
+              )
+              text = re.sub(
+                  r"\.conda-lock-gpu\.tmp\.[A-Za-z0-9]+\.yml",
+                  "conda-lock-gpu.yml",
+                  text,
+              )
+              return text
+
+          canonical = normalize(Path(sys.argv[1]))
+          candidate = normalize(Path(sys.argv[2]))
+          if canonical != candidate:
+              raise SystemExit("GPU lockfile dependency/package drift detected")
+          PY
+
+          echo "GPU dependency/package lock matches conda-lock-gpu.yml."
 
       - name: Upload candidate GPU lock
         if: always()
