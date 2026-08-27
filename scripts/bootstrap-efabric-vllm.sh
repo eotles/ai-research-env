@@ -160,7 +160,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
 fi
 
 # CONFIG_FILE is intentionally dynamic because REPO_DIR is configurable.
-# shellcheck disable=SC1091
+# shellcheck disable=SC1090,SC1091
 source "${CONFIG_FILE}"
 
 : "${VLLM_VERSION:?VLLM_VERSION must be set in vllm-runtime.env}"
