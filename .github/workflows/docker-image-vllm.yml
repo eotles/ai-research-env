@@ -72,7 +72,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           docker run --rm \
-            --entrypoint python \
+            --entrypoint python3 \
             ai-research-env:vllm-test \
             /opt/ai-research-env/vllm_smoke_test.py
 
@@ -81,7 +81,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           docker run --rm \
-            --entrypoint python \
+            --entrypoint python3 \
             ai-research-env:vllm-test \
             -m pip check
 
