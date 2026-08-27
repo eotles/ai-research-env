@@ -4,18 +4,17 @@ set -Eeuo pipefail
 
 # Generate the canonical multi-platform conda lockfile.
 #
-# By default, seed conda-lock with the existing canonical lockfile. conda-lock
-# then treats the existing solution as a constraint, which keeps unrelated
-# packages stable when a dependency is added or adjusted.
-#
 # Usage:
 #
 #   bash scripts/generate-lockfile.sh
-#   bash scripts/generate-lockfile.sh /path/to/candidate-conda-lock.yml
-#   bash scripts/generate-lockfile.sh --refresh /path/to/candidate-conda-lock.yml
 #
-# --refresh deliberately solves from scratch and is intended for scheduled
-# dependency-drift monitoring or intentional broad dependency refreshes.
+# writes:
+#
+#   ./conda-lock.yml
+#
+# Or:
+#
+#   bash scripts/generate-lockfile.sh /path/to/candidate-conda-lock.yml
 
 SCRIPT_DIR="$(
   cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -28,34 +27,12 @@ REPO_ROOT="$(
 )"
 
 ENVIRONMENT_FILE="${REPO_ROOT}/environment.yml"
-CANONICAL_LOCK="${REPO_ROOT}/conda-lock.yml"
-OUTPUT_FILE="${CANONICAL_LOCK}"
-REFRESH=false
+OUTPUT_FILE="${1:-${REPO_ROOT}/conda-lock.yml}"
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --refresh)
-      REFRESH=true
-      shift
-      ;;
-    -h|--help)
-      sed -n '3,17p' "$0"
-      exit 0
-      ;;
-    -*)
-      echo "Error: unknown option: $1" >&2
-      exit 2
-      ;;
-    *)
-      OUTPUT_FILE="$1"
-      shift
-      if [[ $# -gt 0 ]]; then
-        echo "Error: only one output path may be supplied." >&2
-        exit 2
-      fi
-      ;;
-  esac
-done
+
+# -----------------------------------------------------------------------------
+# Locate the conda-compatible executable
+# -----------------------------------------------------------------------------
 
 if [[ -z "${MAMBA_EXE:-}" ]]; then
   if command -v micromamba >/dev/null 2>&1; then
@@ -70,6 +47,11 @@ if [[ -z "${MAMBA_EXE:-}" ]]; then
   fi
 fi
 
+
+# -----------------------------------------------------------------------------
+# Validate prerequisites
+# -----------------------------------------------------------------------------
+
 if [[ ! -f "${ENVIRONMENT_FILE}" ]]; then
   echo "Error: environment file not found: ${ENVIRONMENT_FILE}" >&2
   exit 1
@@ -80,56 +62,32 @@ if ! "${MAMBA_EXE}" run -n base conda-lock --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# Always process the working lock beside the canonical lock. conda-lock records
-# source paths relative to the lockfile, while OUTPUT_FILE may be a CI artifact
-# path elsewhere on disk.
-CANONICAL_DIR="$(
-  cd "$(dirname "${CANONICAL_LOCK}")"
-  pwd
+
+# -----------------------------------------------------------------------------
+# Generate atomically
+# -----------------------------------------------------------------------------
+
+OUTPUT_DIR="$(dirname "${OUTPUT_FILE}")"
+
+mkdir -p "${OUTPUT_DIR}"
+
+# Create a temporary directory on the same filesystem as the final lockfile.
+# The lockfile path itself must not already exist when conda-lock is invoked.
+TEMP_DIR="$(
+  mktemp -d "${OUTPUT_DIR}/.conda-lock.tmp.XXXXXX"
 )"
-mkdir -p "$(dirname "${OUTPUT_FILE}")"
-TEMP_FILE="$(mktemp "${CANONICAL_DIR}/.conda-lock.tmp.XXXXXX.yml")"
+
+TEMP_FILE="${TEMP_DIR}/conda-lock.yml"
 
 cleanup() {
-  rm -f "${TEMP_FILE}"
+  rm -rf "${TEMP_DIR}"
 }
+
 trap cleanup EXIT
-
-normalize_seed_source() {
-  local lock_file="$1"
-  local source_name="$2"
-
-  python - "${lock_file}" "${source_name}" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-source_name = sys.argv[2]
-text = path.read_text()
-pattern = re.compile(r"(?m)^  sources:\n(?:  - .*\n)+")
-replacement = f"  sources:\n  - {source_name}\n"
-updated, count = pattern.subn(replacement, text, count=1)
-if count != 1:
-    raise SystemExit("Could not normalize metadata.sources in seeded lockfile")
-path.write_text(updated)
-PY
-}
 
 echo "Environment file: ${ENVIRONMENT_FILE}"
 echo "Output lockfile:  ${OUTPUT_FILE}"
 echo "Conda executable: ${MAMBA_EXE}"
-
-if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
-  cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
-  # Historical lockfiles may contain source paths that reflect the directory in
-  # which they were originally generated. Normalize that metadata before using
-  # the old lock as package constraints, then parse the current source explicitly.
-  normalize_seed_source "${TEMP_FILE}" "environment.yml"
-  echo "Lock strategy:    preserve existing compatible package solutions"
-else
-  echo "Lock strategy:    fresh solve"
-fi
 
 "${MAMBA_EXE}" run -n base conda-lock \
   --conda "${MAMBA_EXE}" \
