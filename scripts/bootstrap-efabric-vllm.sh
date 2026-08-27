@@ -31,7 +31,7 @@ launch an interactive Bash shell using that runtime.
 Options:
   --force-reinstall  Recreate the vLLM virtual environment.
   --smoke-test       Require a supported CUDA GPU and run the lightweight test.
-  --model MODEL      Also load MODEL and perform a real vLLM generation.
+  --model MODEL      Also load MODEL and perform a fast real vLLM generation.
   --no-shell         Update/reconcile the runtime, then exit.
   --branch NAME      Track a branch other than main.
   -h, --help         Show this help.
@@ -211,35 +211,75 @@ ensure_uv() {
 
 ensure_uv
 
-SPEC_HASH="$(sha256sum "${CONFIG_FILE}" | awk '{print $1}')"
-SPEC_MARKER="${STATE_DIR}/vllm-spec.sha256"
+# Only package-affecting settings belong in the environment identity. Runtime
+# defaults such as sampler/telemetry behavior must not cause a 195-package
+# environment to be deleted and recreated.
+PACKAGE_SPEC_HASH="$({
+  printf 'VLLM_VERSION=%s\n' "${VLLM_VERSION}"
+  printf 'VLLM_PYTHON=%s\n' "${VLLM_PYTHON}"
+  printf 'TORCH_BACKEND=auto\n'
+} | sha256sum | awk '{print $1}')"
+PACKAGE_SPEC_MARKER="${STATE_DIR}/vllm-package-spec.sha256"
+LEGACY_SPEC_MARKER="${STATE_DIR}/vllm-spec.sha256"
 VENV_PYTHON="${VENV_DIR}/bin/python"
+
+runtime_matches_package_spec() {
+  local installed_python=""
+  local installed_vllm=""
+
+  [[ -x "${VENV_PYTHON}" ]] || return 1
+
+  installed_python="$(
+    "${VENV_PYTHON}" -c \
+      'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' \
+      2>/dev/null || true
+  )"
+  installed_vllm="$(
+    "${VENV_PYTHON}" -c \
+      'from importlib.metadata import version; print(version("vllm"))' \
+      2>/dev/null || true
+  )"
+
+  [[ "${installed_python}" == "${VLLM_PYTHON}" ]] && \
+    [[ "${installed_vllm}" == "${VLLM_VERSION}" ]]
+}
 
 NEEDS_INSTALL=false
 if [[ "${FORCE_REINSTALL}" == true ]]; then
   NEEDS_INSTALL=true
-elif [[ ! -x "${VENV_PYTHON}" ]]; then
-  NEEDS_INSTALL=true
-elif [[ ! -f "${SPEC_MARKER}" ]]; then
-  NEEDS_INSTALL=true
-elif [[ "$(cat "${SPEC_MARKER}")" != "${SPEC_HASH}" ]]; then
+elif [[ -f "${PACKAGE_SPEC_MARKER}" ]] && \
+     [[ "$(cat "${PACKAGE_SPEC_MARKER}")" == "${PACKAGE_SPEC_HASH}" ]] && \
+     [[ -x "${VENV_PYTHON}" ]]; then
+  :
+elif runtime_matches_package_spec; then
+  echo "Existing vLLM environment already matches the package specification."
+  printf '%s\n' "${PACKAGE_SPEC_HASH}" > "${PACKAGE_SPEC_MARKER}"
+  rm -f "${LEGACY_SPEC_MARKER}"
+else
   NEEDS_INSTALL=true
 fi
 
 if [[ "${NEEDS_INSTALL}" == true ]]; then
   INSTALL_START="${SECONDS}"
   echo "Installing isolated vLLM ${VLLM_VERSION} runtime ..."
-  rm -rf "${VENV_DIR}"
 
+  REMOVE_START="${SECONDS}"
+  rm -rf "${VENV_DIR}"
+  echo "Previous vLLM environment removal: $((SECONDS - REMOVE_START)) seconds"
+
+  VENV_START="${SECONDS}"
   "${UV_BIN}" venv \
     --python "${VLLM_PYTHON}" \
     --seed \
     "${VENV_DIR}"
+  echo "vLLM virtualenv creation: $((SECONDS - VENV_START)) seconds"
 
+  PACKAGE_INSTALL_START="${SECONDS}"
   "${UV_BIN}" pip install \
     --python "${VENV_PYTHON}" \
     --torch-backend=auto \
     "vllm==${VLLM_VERSION}"
+  echo "vLLM package installation: $((SECONDS - PACKAGE_INSTALL_START)) seconds"
 
   echo "Checking installed Python dependencies ..."
   "${VENV_PYTHON}" -m pip check
@@ -247,11 +287,12 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
   AI_RESEARCH_ENV_VLLM_VERSION="${VLLM_VERSION}" \
     "${VENV_PYTHON}" "${REPO_DIR}/scripts/vllm_smoke_test.py"
 
-  printf '%s\n' "${SPEC_HASH}" > "${SPEC_MARKER}"
-  echo "vLLM companion runtime now matches vllm-runtime.env."
+  printf '%s\n' "${PACKAGE_SPEC_HASH}" > "${PACKAGE_SPEC_MARKER}"
+  rm -f "${LEGACY_SPEC_MARKER}"
+  echo "vLLM companion runtime now matches the package specification."
   echo "vLLM install time: $((SECONDS - INSTALL_START)) seconds"
 else
-  echo "vLLM companion runtime already matches vllm-runtime.env."
+  echo "vLLM companion runtime already matches the package specification."
 fi
 
 if [[ "${RUN_SMOKE_TEST}" == true ]]; then
@@ -260,10 +301,12 @@ if [[ "${RUN_SMOKE_TEST}" == true ]]; then
     smoke_args+=(--model "${SMOKE_MODEL}")
   fi
 
+  SMOKE_START="${SECONDS}"
   AI_RESEARCH_ENV_VLLM_VERSION="${VLLM_VERSION}" \
     "${VENV_PYTHON}" \
     "${REPO_DIR}/scripts/vllm_smoke_test.py" \
     "${smoke_args[@]}"
+  echo "vLLM requested smoke-test time: $((SECONDS - SMOKE_START)) seconds"
 fi
 
 printf '%s\n' "${CURRENT_COMMIT}" > "${STATE_DIR}/vllm-repo-commit"
@@ -299,6 +342,8 @@ export VIRTUAL_ENV="${VENV_DIR}"
 export PATH="${VENV_DIR}/bin:\${PATH}"
 export AI_RESEARCH_ENV_VLLM_VERSION="${VLLM_VERSION}"
 export AI_RESEARCH_ENV_COMMIT="${CURRENT_COMMIT}"
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER}"
+export VLLM_NO_USAGE_STATS="${VLLM_NO_USAGE_STATS}"
 PS1='(ai-research-env-vllm) \u@\h:\w\$ '
 
 printf 'Activated ai-research-env-vllm\n'
