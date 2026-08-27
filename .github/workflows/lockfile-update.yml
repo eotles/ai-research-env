@@ -3,7 +3,7 @@ name: lockfile-update
 on:
   # Normal behavior:
   # Regenerate and commit the canonical lockfile when the environment
-  # definition changes, preserving compatible locked package versions.
+  # definition changes.
   push:
     branches:
       - main
@@ -13,10 +13,13 @@ on:
       - .github/workflows/lockfile-update.yml
 
   # Weekly monitoring:
-  # Resolve from scratch and report dependency drift without committing it.
+  # Freshly resolve the environment and report lockfile drift.
+  # Scheduled runs never commit changes.
   schedule:
     - cron: "17 10 * * 1"
 
+  # Manual execution:
+  # Allows resolution and CI/CD testing without a meaningless source change.
   workflow_dispatch:
     inputs:
       commit_lockfile:
@@ -48,6 +51,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+
           echo "CANDIDATE_LOCK=${RUNNER_TEMP}/candidate-conda-lock.yml" \
             >> "${GITHUB_ENV}"
 
@@ -61,6 +65,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+
           micromamba install \
             -y \
             -n base \
@@ -71,8 +76,10 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+
           echo "Trigger: ${GITHUB_EVENT_NAME}"
           echo "MAMBA_EXE=${MAMBA_EXE}"
+
           "${MAMBA_EXE}" --version
           "${MAMBA_EXE}" run -n base conda-lock --version
 
@@ -85,14 +92,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          refresh_args=()
-          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
-            refresh_args+=(--refresh)
-          fi
-
-          bash scripts/generate-lockfile.sh \
-            "${refresh_args[@]}" \
-            "${CANDIDATE_LOCK}"
+          bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
 
       - name: Report solve failure
         if: steps.generate.outcome != 'success'
@@ -104,6 +104,7 @@ jobs:
             echo "- Trigger: \`${GITHUB_EVENT_NAME}\`"
             echo "- The multi-platform environment could not be resolved."
           } >> "${GITHUB_STEP_SUMMARY}"
+
           echo "::error::Lockfile generation failed."
 
       - name: Report lockfile drift
@@ -123,24 +124,27 @@ jobs:
               echo
               echo "No committed canonical lockfile currently exists."
             } >> "${GITHUB_STEP_SUMMARY}"
+
             echo "::warning::No committed conda-lock.yml exists."
 
           elif ! cmp -s conda-lock.yml "${CANDIDATE_LOCK}"; then
             {
               echo "**Drift detected:** yes"
               echo
-              echo "The dependency solve differs from the committed lockfile."
+              echo "A fresh dependency solve differs from the committed lockfile."
             } >> "${GITHUB_STEP_SUMMARY}"
-            echo "::warning::Dependency solve produced lockfile drift."
+
+            echo "::warning::A fresh dependency solve produced lockfile drift."
             diff --brief conda-lock.yml "${CANDIDATE_LOCK}" || true
 
           else
             {
               echo "**Drift detected:** no"
               echo
-              echo "The dependency solve matches the committed lockfile."
+              echo "The fresh dependency solve matches the committed lockfile."
             } >> "${GITHUB_STEP_SUMMARY}"
-            echo "Dependency solve matches the committed lockfile."
+
+            echo "Fresh solve matches the committed lockfile."
           fi
 
       - name: Upload candidate lock
@@ -169,6 +173,7 @@ jobs:
 
           if [[ ! -f conda-lock.yml ]] || \
              ! cmp -s conda-lock.yml "${CANDIDATE_LOCK}"; then
+
             cp "${CANDIDATE_LOCK}" conda-lock.yml
 
             git config user.name "github-actions[bot]"
@@ -206,6 +211,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -Eeuo pipefail
+
           gh workflow run docker-image.yml \
             --ref main \
             -f push_image=true
