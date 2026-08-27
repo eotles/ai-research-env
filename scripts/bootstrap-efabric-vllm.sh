@@ -30,7 +30,7 @@ launch an interactive Bash shell using that runtime.
 
 Options:
   --force-reinstall  Recreate the vLLM virtual environment.
-  --smoke-test       Require CUDA and run the lightweight vLLM smoke test.
+  --smoke-test       Require a supported CUDA GPU and run the lightweight test.
   --model MODEL      Also load MODEL and perform a real vLLM generation.
   --no-shell         Update/reconcile the runtime, then exit.
   --branch NAME      Track a branch other than main.
@@ -43,6 +43,7 @@ Environment overrides:
   AI_RESEARCH_ENV_VLLM_VENV_DIR
   AI_RESEARCH_ENV_STATE_DIR
   AI_RESEARCH_ENV_START_DIR
+  AI_RESEARCH_ENV_VLLM_UV_DIR
 EOF
 }
 
@@ -98,7 +99,6 @@ require_command() {
 }
 
 require_command git
-require_command uv
 require_command sha256sum
 require_command awk
 
@@ -165,6 +165,45 @@ source "${CONFIG_FILE}"
 
 : "${VLLM_VERSION:?VLLM_VERSION must be set in vllm-runtime.env}"
 : "${VLLM_PYTHON:?VLLM_PYTHON must be set in vllm-runtime.env}"
+: "${UV_VERSION:?UV_VERSION must be set in vllm-runtime.env}"
+
+UV_BIN_DIR="${AI_RESEARCH_ENV_VLLM_UV_DIR:-${STATE_DIR}/vllm-tools}"
+UV_BIN="${UV_BIN_DIR}/uv"
+
+ensure_uv() {
+  local actual_version=""
+
+  if [[ -x "${UV_BIN}" ]]; then
+    actual_version="$("${UV_BIN}" --version 2>/dev/null || true)"
+  fi
+
+  if [[ "${actual_version}" == "uv ${UV_VERSION}" ]]; then
+    echo "Using managed ${actual_version}."
+    return
+  fi
+
+  require_command curl
+  mkdir -p "${UV_BIN_DIR}"
+
+  echo "Installing managed uv ${UV_VERSION} into ${UV_BIN_DIR} ..."
+  curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | \
+    env UV_UNMANAGED_INSTALL="${UV_BIN_DIR}" sh
+
+  if [[ ! -x "${UV_BIN}" ]]; then
+    echo "Error: uv installer completed but ${UV_BIN} was not created." >&2
+    exit 1
+  fi
+
+  actual_version="$("${UV_BIN}" --version)"
+  if [[ "${actual_version}" != "uv ${UV_VERSION}" ]]; then
+    echo "Error: expected uv ${UV_VERSION}, found ${actual_version}." >&2
+    exit 1
+  fi
+
+  echo "Installed ${actual_version}."
+}
+
+ensure_uv
 
 SPEC_HASH="$(sha256sum "${CONFIG_FILE}" | awk '{print $1}')"
 SPEC_MARKER="${STATE_DIR}/vllm-spec.sha256"
@@ -186,12 +225,12 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
   echo "Installing isolated vLLM ${VLLM_VERSION} runtime ..."
   rm -rf "${VENV_DIR}"
 
-  uv venv \
+  "${UV_BIN}" venv \
     --python "${VLLM_PYTHON}" \
     --seed \
     "${VENV_DIR}"
 
-  uv pip install \
+  "${UV_BIN}" pip install \
     --python "${VENV_PYTHON}" \
     --torch-backend=auto \
     "vllm==${VLLM_VERSION}"
@@ -228,6 +267,7 @@ echo "EFabric vLLM companion runtime ready."
 echo "Repository:   ${REPO_DIR}"
 echo "Commit:       ${CURRENT_COMMIT}"
 echo "vLLM:        ${VLLM_VERSION}"
+echo "uv:          $("${UV_BIN}" --version)"
 echo "Environment: ${VENV_DIR}"
 echo "Bootstrap time: $((SECONDS - BOOTSTRAP_START)) seconds"
 
