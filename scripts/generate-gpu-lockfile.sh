@@ -4,17 +4,18 @@ set -Eeuo pipefail
 
 # Generate the canonical Linux x86-64 CUDA lockfile.
 #
+# By default, seed conda-lock with the existing canonical lockfile. conda-lock
+# then treats the existing solution as a constraint, which keeps unrelated
+# packages stable when a dependency is added or adjusted.
+#
 # Usage:
 #
 #   bash scripts/generate-gpu-lockfile.sh
-#
-# writes:
-#
-#   ./conda-lock-gpu.yml
-#
-# Or:
-#
 #   bash scripts/generate-gpu-lockfile.sh /path/to/candidate-conda-lock-gpu.yml
+#   bash scripts/generate-gpu-lockfile.sh --refresh /path/to/candidate-conda-lock-gpu.yml
+#
+# --refresh deliberately solves from scratch and is intended for scheduled
+# dependency-drift monitoring or intentional broad dependency refreshes.
 
 SCRIPT_DIR="$(
   cd "$(dirname "${BASH_SOURCE[0]}")"
@@ -27,7 +28,34 @@ REPO_ROOT="$(
 )"
 
 ENVIRONMENT_FILE="${REPO_ROOT}/environment-gpu.yml"
-OUTPUT_FILE="${1:-${REPO_ROOT}/conda-lock-gpu.yml}"
+CANONICAL_LOCK="${REPO_ROOT}/conda-lock-gpu.yml"
+OUTPUT_FILE="${CANONICAL_LOCK}"
+REFRESH=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --refresh)
+      REFRESH=true
+      shift
+      ;;
+    -h|--help)
+      sed -n '3,17p' "$0"
+      exit 0
+      ;;
+    -*)
+      echo "Error: unknown option: $1" >&2
+      exit 2
+      ;;
+    *)
+      OUTPUT_FILE="$1"
+      shift
+      if [[ $# -gt 0 ]]; then
+        echo "Error: only one output path may be supplied." >&2
+        exit 2
+      fi
+      ;;
+  esac
+done
 
 # -----------------------------------------------------------------------------
 # Locate the conda-compatible executable
@@ -80,6 +108,13 @@ trap cleanup EXIT
 echo "Environment file: ${ENVIRONMENT_FILE}"
 echo "Output lockfile:  ${OUTPUT_FILE}"
 echo "Conda executable: ${MAMBA_EXE}"
+
+if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
+  cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
+  echo "Lock strategy:    preserve existing compatible package solutions"
+else
+  echo "Lock strategy:    fresh solve"
+fi
 
 # Do not pass --without-cuda here. The purpose of this target is to resolve and
 # retain the CUDA runtime selected by pytorch-cuda=12.4.
