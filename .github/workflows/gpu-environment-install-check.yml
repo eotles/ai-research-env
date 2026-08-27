@@ -6,6 +6,7 @@ on:
       - environment-gpu.yml
       - conda-lock-gpu.yml
       - scripts/generate-gpu-lockfile.sh
+      - scripts/reconcile-conda-lock-env.sh
       - scripts/configure-gpu-runtime.sh
       - scripts/smoke_test.py
       - scripts/gpu_smoke_test.py
@@ -67,6 +68,16 @@ jobs:
             --conda "${MAMBA_EXE}" \
             --name ai-research-env-gpu \
             "${CANDIDATE_LOCK}"
+
+      - name: Validate incremental exact-lock reconciliation
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash scripts/reconcile-conda-lock-env.sh \
+            --lock "${CANDIDATE_LOCK}" \
+            --name ai-research-env-gpu \
+            --lock-tools-env base \
+            --platform linux-64
 
       - name: Configure GPU runtime defaults
         shell: bash

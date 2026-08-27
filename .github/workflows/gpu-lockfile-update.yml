@@ -77,7 +77,15 @@ jobs:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
         run: |
           set -Eeuo pipefail
-          bash scripts/generate-gpu-lockfile.sh "${CANDIDATE_LOCK}"
+
+          refresh_args=()
+          if [[ "${GITHUB_EVENT_NAME}" == "schedule" ]]; then
+            refresh_args+=(--refresh)
+          fi
+
+          bash scripts/generate-gpu-lockfile.sh \
+            "${refresh_args[@]}" \
+            "${CANDIDATE_LOCK}"
 
       - name: Report solve failure
         if: steps.generate.outcome != 'success'
@@ -107,11 +115,11 @@ jobs:
             echo "::warning::No committed conda-lock-gpu.yml exists."
           elif ! cmp -s conda-lock-gpu.yml "${CANDIDATE_LOCK}"; then
             echo "**Drift detected:** yes" >> "${GITHUB_STEP_SUMMARY}"
-            echo "::warning::A fresh GPU dependency solve produced lockfile drift."
+            echo "::warning::GPU dependency solve produced lockfile drift."
             diff --brief conda-lock-gpu.yml "${CANDIDATE_LOCK}" || true
           else
             echo "**Drift detected:** no" >> "${GITHUB_STEP_SUMMARY}"
-            echo "Fresh GPU solve matches the committed lockfile."
+            echo "GPU solve matches the committed lockfile."
           fi
 
       - name: Upload candidate GPU lock
