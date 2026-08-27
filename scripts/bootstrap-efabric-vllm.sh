@@ -170,15 +170,20 @@ source "${CONFIG_FILE}"
 UV_BIN_DIR="${AI_RESEARCH_ENV_VLLM_UV_DIR:-${STATE_DIR}/vllm-tools}"
 UV_BIN="${UV_BIN_DIR}/uv"
 
+uv_semver() {
+  "${UV_BIN}" --version 2>/dev/null | awk '{print $2}'
+}
+
 ensure_uv() {
   local actual_version=""
+  local version_output=""
 
   if [[ -x "${UV_BIN}" ]]; then
-    actual_version="$("${UV_BIN}" --version 2>/dev/null || true)"
+    actual_version="$(uv_semver || true)"
   fi
 
-  if [[ "${actual_version}" == "uv ${UV_VERSION}" ]]; then
-    echo "Using managed ${actual_version}."
+  if [[ "${actual_version}" == "${UV_VERSION}" ]]; then
+    echo "Using managed $("${UV_BIN}" --version)."
     return
   fi
 
@@ -194,13 +199,14 @@ ensure_uv() {
     exit 1
   fi
 
-  actual_version="$("${UV_BIN}" --version)"
-  if [[ "${actual_version}" != "uv ${UV_VERSION}" ]]; then
-    echo "Error: expected uv ${UV_VERSION}, found ${actual_version}." >&2
+  actual_version="$(uv_semver)"
+  if [[ "${actual_version}" != "${UV_VERSION}" ]]; then
+    version_output="$("${UV_BIN}" --version 2>/dev/null || true)"
+    echo "Error: expected uv ${UV_VERSION}, found ${version_output:-unknown}." >&2
     exit 1
   fi
 
-  echo "Installed ${actual_version}."
+  echo "Installed $("${UV_BIN}" --version)."
 }
 
 ensure_uv
