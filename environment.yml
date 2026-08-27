@@ -47,6 +47,7 @@ dependencies:
   - requests
   - typer
   - joblib
+  - jq
 
   # Configuration framework used heavily by the MEDS ecosystem
   - hydra-core
