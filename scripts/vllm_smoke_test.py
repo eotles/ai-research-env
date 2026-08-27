@@ -5,6 +5,9 @@ import os
 import sys
 
 
+MIN_NVIDIA_COMPUTE_CAPABILITY = (7, 5)
+
+
 def section(title: str) -> None:
     print("=" * 79)
     print(title)
@@ -18,7 +21,7 @@ def main() -> None:
     parser.add_argument(
         "--require-cuda",
         action="store_true",
-        help="Fail unless a real CUDA device is visible.",
+        help="Fail unless a supported NVIDIA CUDA device is visible.",
     )
     parser.add_argument(
         "--model",
@@ -51,11 +54,19 @@ def main() -> None:
         section("CUDA device")
         device = torch.cuda.current_device()
         props = torch.cuda.get_device_properties(device)
+        capability = (props.major, props.minor)
         print(f"Device index:         {device}")
         print(f"Device name:          {props.name}")
         print(f"Compute capability:   {props.major}.{props.minor}")
         print(f"Total memory (GiB):   {props.total_memory / 2**30:.2f}")
         print(f"BF16 supported:       {torch.cuda.is_bf16_supported()}")
+
+        if capability < MIN_NVIDIA_COMPUTE_CAPABILITY:
+            minimum = ".".join(str(part) for part in MIN_NVIDIA_COMPUTE_CAPABILITY)
+            raise RuntimeError(
+                "Visible NVIDIA GPU is below the supported vLLM compute "
+                f"capability: found {props.major}.{props.minor}, need >= {minimum}."
+            )
 
     if args.model:
         if not torch.cuda.is_available():
