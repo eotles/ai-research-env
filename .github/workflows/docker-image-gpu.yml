@@ -8,6 +8,7 @@ on:
       - config/**
       - scripts/smoke_test.py
       - scripts/gpu_smoke_test.py
+      - scripts/configure-gpu-runtime.sh
       - .github/workflows/docker-image-gpu.yml
 
   push:
@@ -19,6 +20,7 @@ on:
       - config/**
       - scripts/smoke_test.py
       - scripts/gpu_smoke_test.py
+      - scripts/configure-gpu-runtime.sh
       - .github/workflows/docker-image-gpu.yml
 
   workflow_dispatch:
@@ -82,6 +84,13 @@ jobs:
           docker run --rm ai-research-env:gpu-test \
             python /opt/ai-research-env/gpu_smoke_test.py
 
+      - name: Validate GNU time
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          docker run --rm ai-research-env:gpu-test /usr/bin/time --version
+          docker run --rm ai-research-env:gpu-test /usr/bin/time -v true
+
       - name: Validate Git and Zsh terminal environment
         shell: bash
         run: |
@@ -96,6 +105,8 @@ jobs:
               echo "CONDA_DEFAULT_ENV=${CONDA_DEFAULT_ENV:-}"
               test "$SHELL" = /bin/zsh
               test "$CONDA_DEFAULT_ENV" = ai-research-env-gpu
+              test "$USE_TORCH" = 1
+              test "$USE_TF" = 0
               command -v zsh
               zsh --version
               command -v git

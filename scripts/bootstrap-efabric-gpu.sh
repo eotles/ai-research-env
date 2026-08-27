@@ -8,8 +8,9 @@ set -Eeuo pipefail
 # Each invocation:
 #   1. Clones or fast-forwards ai-research-env to the requested branch.
 #   2. Reconciles ai-research-env-gpu only when conda-lock-gpu.yml changes.
-#   3. Keeps the micromamba environment in persistent EFabric home storage.
-#   4. Starts an interactive Bash shell with the GPU environment activated.
+#   3. Applies canonical GPU runtime defaults to the installed environment.
+#   4. Keeps the micromamba environment in persistent EFabric home storage.
+#   5. Starts an interactive Bash shell with the GPU environment activated.
 #
 # Nothing is installed into shell startup files and nothing runs automatically
 # at login. The user explicitly launches the environment with this script.
@@ -221,6 +222,11 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
 else
   echo "GPU environment already matches the latest canonical lock."
 fi
+
+# Runtime defaults are configured independently of the dependency lock so an
+# existing persistent EFabric environment picks them up without requiring a
+# reinstall when only this configuration changes.
+bash "${REPO_DIR}/scripts/configure-gpu-runtime.sh" "${ENV_NAME}"
 
 printf '%s\n' "${CURRENT_COMMIT}" > "${STATE_DIR}/repo-commit"
 

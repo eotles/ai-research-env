@@ -4,12 +4,14 @@ WORKDIR /work
 
 # Match the interactive tooling provided by the portable CPU image. Include
 # OpenSSH and CA certificates so Git works with both SSH and HTTPS remotes.
+# GNU time is included for detailed command resource measurements.
 USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       git \
       openssh-client \
+      time \
       zsh && \
     rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER
@@ -27,6 +29,9 @@ COPY --chown=$MAMBA_USER:$MAMBA_USER \
 COPY --chown=$MAMBA_USER:$MAMBA_USER \
     scripts/gpu_smoke_test.py \
     /opt/ai-research-env/gpu_smoke_test.py
+COPY --chown=$MAMBA_USER:$MAMBA_USER \
+    scripts/configure-gpu-runtime.sh \
+    /opt/ai-research-env/configure-gpu-runtime.sh
 
 COPY --chown=$MAMBA_USER:$MAMBA_USER \
     config/zshrc \
@@ -46,6 +51,7 @@ RUN micromamba install \
       --conda "$(command -v micromamba)" \
       --name ai-research-env-gpu \
       /tmp/conda-lock-gpu.yml && \
+    bash /opt/ai-research-env/configure-gpu-runtime.sh ai-research-env-gpu && \
     micromamba clean --all --yes && \
     rm -f /tmp/conda-lock-gpu.yml
 

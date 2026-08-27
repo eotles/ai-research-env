@@ -2,16 +2,17 @@ FROM mambaorg/micromamba:2.8.1-debian12-slim
 
 WORKDIR /work
 
-# Git and Zsh are container-level tooling rather than scientific environment
-# dependencies. Keep environment.yml shell-neutral and cross-platform.
-# Include OpenSSH and CA certificates so Git works with both SSH and HTTPS
-# remotes in remote research environments.
+# Git, Zsh, GNU time, and related utilities are container-level tooling rather
+# than scientific environment dependencies. Keep environment.yml shell-neutral
+# and cross-platform. Include OpenSSH and CA certificates so Git works with both
+# SSH and HTTPS remotes in remote research environments.
 USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       ca-certificates \
       git \
       openssh-client \
+      time \
       zsh && \
     rm -rf /var/lib/apt/lists/*
 USER $MAMBA_USER

@@ -6,6 +6,7 @@ on:
       - environment-gpu.yml
       - conda-lock-gpu.yml
       - scripts/generate-gpu-lockfile.sh
+      - scripts/configure-gpu-runtime.sh
       - scripts/smoke_test.py
       - scripts/gpu_smoke_test.py
       - .github/workflows/gpu-environment-install-check.yml
@@ -66,6 +67,12 @@ jobs:
             --conda "${MAMBA_EXE}" \
             --name ai-research-env-gpu \
             "${CANDIDATE_LOCK}"
+
+      - name: Configure GPU runtime defaults
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          bash scripts/configure-gpu-runtime.sh ai-research-env-gpu
 
       - name: Validate Python dependency consistency
         shell: bash

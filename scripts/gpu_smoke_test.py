@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
+import subprocess
 import sys
+import textwrap
 
 import torch
 
@@ -24,6 +27,73 @@ def section(title: str) -> None:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def validate_runtime_defaults() -> None:
+    section("PyTorch-first Transformers defaults")
+
+    expected = {
+        "USE_TORCH": "1",
+        "USE_TF": "0",
+    }
+
+    for name, value in expected.items():
+        actual = os.environ.get(name)
+        require(
+            actual == value,
+            f"Expected {name}={value!r}, found {actual!r}.",
+        )
+        print(f"{name}={actual}")
+
+    code = textwrap.dedent(
+        """
+        import sys
+
+        from transformers import BertConfig, BertModel
+        from transformers.utils import is_tf_available, is_torch_available
+
+        if not is_torch_available():
+            raise RuntimeError("Transformers does not report PyTorch as available.")
+        if is_tf_available():
+            raise RuntimeError("Transformers unexpectedly reports TensorFlow as available.")
+        if "tensorflow" in sys.modules:
+            raise RuntimeError("TensorFlow was imported during a PyTorch-only Transformers import.")
+
+        config = BertConfig(
+            vocab_size=128,
+            hidden_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            intermediate_size=64,
+            max_position_embeddings=64,
+        )
+        model = BertModel(config)
+
+        if "tensorflow" in sys.modules:
+            raise RuntimeError("TensorFlow was imported while constructing a PyTorch model.")
+
+        print("Transformers backend: PyTorch")
+        print("TensorFlow imported: no")
+        """
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=os.environ.copy(),
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "PyTorch-first Transformers isolation check failed.\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    print(result.stdout.strip())
+    print("PASS: Transformers uses PyTorch without importing TensorFlow.")
 
 
 def validate_cuda_build() -> None:
@@ -140,6 +210,7 @@ def main() -> int:
     args = parser.parse_args()
 
     try:
+        validate_runtime_defaults()
         validate_cuda_build()
 
         if args.require_cuda:
