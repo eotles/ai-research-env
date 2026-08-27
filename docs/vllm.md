@@ -8,20 +8,41 @@ PyTorch/CUDA binary stack.
 This separation prevents installing vLLM from silently replacing the PyTorch and
 CUDA packages qualified for `ai-research-env-gpu`.
 
-## Canonical version
+## Canonical versions
 
-The supported vLLM release is defined in:
+The supported runtime versions are defined in:
 
 ```text
 vllm-runtime.env
 ```
 
-The current target is vLLM 0.28.0 with Python 3.12.
+The current target is vLLM 0.28.0 with Python 3.12. The bootstrap also uses a
+pinned, repository-managed `uv` binary so EFabric does not need to provide `uv`
+as part of its base image.
+
+## Supported NVIDIA GPUs
+
+The EFabric companion runtime is not tied to an A100. It targets NVIDIA CUDA GPUs
+supported by the pinned vLLM release. Current vLLM CUDA requirements specify
+compute capability 7.5 or newer.
+
+Examples that satisfy this requirement include:
+
+- NVIDIA A100, compute capability 8.0
+- NVIDIA RTX A5000, compute capability 8.6
+- NVIDIA T4, compute capability 7.5
+- newer Ampere, Ada, Hopper, and Blackwell devices that meet the same requirement
+
+The bootstrap uses `uv pip install --torch-backend=auto`, so the PyTorch wheel
+selection is based on the host NVIDIA driver rather than a hard-coded GPU model.
+Actual usable model size and throughput will still depend on GPU memory and
+hardware performance. An RTX A5000 has substantially less memory than many A100
+configurations, so a model that runs on both GPUs may require different batching,
+context length, or memory-utilization settings.
 
 ## EFabric
 
-EFabric Workspaces already provide `uv`, persistent home storage, and an NVIDIA
-GPU driver. The supported one-command entry point is:
+The supported one-command entry point is:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-vllm.sh)
@@ -30,18 +51,20 @@ bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/
 The bootstrap:
 
 1. Updates the persistent `ai-research-env` checkout.
-2. Reads the canonical vLLM version from `vllm-runtime.env`.
-3. Creates an isolated persistent virtual environment at
+2. Reads the canonical vLLM, Python, and `uv` versions from `vllm-runtime.env`.
+3. Installs the pinned `uv` binary into persistent user storage if it is absent.
+   It does not modify shell startup files or depend on a system-wide `uv` install.
+4. Creates an isolated persistent virtual environment at
    `$HOME/.venvs/ai-research-env-vllm`.
-4. Installs vLLM with `uv pip install --torch-backend=auto`, allowing vLLM to
+5. Installs vLLM with `uv pip install --torch-backend=auto`, allowing vLLM to
    select the PyTorch/CUDA wheel stack appropriate for the host NVIDIA driver.
-5. Runs `pip check` and a lightweight vLLM import/runtime smoke test.
-6. Reuses the environment on future invocations until the canonical vLLM
+6. Runs `pip check` and a lightweight vLLM import/runtime smoke test.
+7. Reuses the environment on future invocations until the canonical vLLM
    specification changes.
-7. Starts an interactive shell with the vLLM virtual environment first on
+8. Starts an interactive shell with the vLLM virtual environment first on
    `PATH`.
 
-To require a real CUDA device during validation:
+To require a supported real CUDA device during validation:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/scripts/bootstrap-efabric-vllm.sh) \
