@@ -8,9 +8,10 @@ set -Eeuo pipefail
 # Each invocation:
 #   1. Clones or fast-forwards ai-research-env to the requested branch.
 #   2. Reconciles ai-research-env-gpu only when conda-lock-gpu.yml changes.
-#   3. Applies canonical GPU runtime defaults to the installed environment.
-#   4. Keeps the micromamba environment in persistent EFabric home storage.
-#   5. Starts an interactive Bash shell with the GPU environment activated.
+#   3. Uses an incremental exact-lock update first, with a clean rebuild fallback.
+#   4. Applies canonical GPU runtime defaults to the installed environment.
+#   5. Keeps the micromamba environment in persistent EFabric home storage.
+#   6. Starts an interactive Bash shell with the GPU environment activated.
 #
 # Nothing is installed into shell startup files and nothing runs automatically
 # at login. The user explicitly launches the environment with this script.
@@ -30,6 +31,7 @@ RUN_SMOKE_TEST=false
 NO_SHELL=false
 REEXECUTED="${AI_RESEARCH_ENV_BOOTSTRAP_REEXEC:-0}"
 START_DIR="${AI_RESEARCH_ENV_START_DIR:-${PWD}}"
+BOOTSTRAP_START="${SECONDS}"
 
 ORIGINAL_ARGS=("$@")
 
@@ -114,7 +116,9 @@ if [[ -d "${REPO_DIR}/.git" ]]; then
   BEFORE_COMMIT="$(git -C "${REPO_DIR}" rev-parse HEAD 2>/dev/null || true)"
 fi
 
-if [[ ! -d "${REPO_DIR}/.git" ]]; then
+if [[ "${REEXECUTED}" == "1" ]] && [[ -d "${REPO_DIR}/.git" ]]; then
+  echo "Using the checkout updated by the bootstrap re-exec."
+elif [[ ! -d "${REPO_DIR}/.git" ]]; then
   echo "Cloning ai-research-env (${BRANCH}) into ${REPO_DIR} ..."
   git clone \
     --branch "${BRANCH}" \
@@ -163,47 +167,49 @@ LOCK_MARKER="${STATE_DIR}/conda-lock-gpu.sha256"
 ENV_PREFIX="${MAMBA_ROOT_PREFIX}/envs/${ENV_NAME}"
 ENV_PYTHON="${ENV_PREFIX}/bin/python"
 
-NEEDS_INSTALL=false
+NEEDS_RECONCILE=false
 if [[ "${FORCE_REINSTALL}" == true ]]; then
-  NEEDS_INSTALL=true
+  NEEDS_RECONCILE=true
 elif [[ ! -x "${ENV_PYTHON}" ]]; then
-  NEEDS_INSTALL=true
+  NEEDS_RECONCILE=true
 elif [[ ! -f "${LOCK_MARKER}" ]]; then
-  NEEDS_INSTALL=true
+  NEEDS_RECONCILE=true
 elif [[ "$(cat "${LOCK_MARKER}")" != "${LOCK_HASH}" ]]; then
-  NEEDS_INSTALL=true
+  NEEDS_RECONCILE=true
 fi
 
-if [[ "${NEEDS_INSTALL}" == true ]]; then
-  echo "GPU environment is missing or out of date."
-  echo "Canonical lock SHA256: ${LOCK_HASH}"
-
-  LOCK_VERSION="$(
+ensure_lock_tools() {
+  local lock_version
+  lock_version="$(
     micromamba run -n "${LOCK_TOOLS_ENV}" conda-lock --version 2>/dev/null || true
   )"
 
-  if [[ "${LOCK_VERSION}" != *"3.0.4"* ]]; then
-    if [[ -d "${MAMBA_ROOT_PREFIX}/envs/${LOCK_TOOLS_ENV}" ]]; then
-      echo "Updating ${LOCK_TOOLS_ENV} ..."
-      micromamba install \
-        -y \
-        -n "${LOCK_TOOLS_ENV}" \
-        -c conda-forge \
-        python=3.12 \
-        conda-lock=3.0.4
-    else
-      echo "Creating ${LOCK_TOOLS_ENV} ..."
-      micromamba create \
-        -y \
-        -n "${LOCK_TOOLS_ENV}" \
-        -c conda-forge \
-        python=3.12 \
-        conda-lock=3.0.4
-    fi
+  if [[ "${lock_version}" == *"3.0.4"* ]]; then
+    return
   fi
 
+  if [[ -d "${MAMBA_ROOT_PREFIX}/envs/${LOCK_TOOLS_ENV}" ]]; then
+    echo "Updating ${LOCK_TOOLS_ENV} ..."
+    micromamba install \
+      -y \
+      -n "${LOCK_TOOLS_ENV}" \
+      -c conda-forge \
+      python=3.12 \
+      conda-lock=3.0.4
+  else
+    echo "Creating ${LOCK_TOOLS_ENV} ..."
+    micromamba create \
+      -y \
+      -n "${LOCK_TOOLS_ENV}" \
+      -c conda-forge \
+      python=3.12 \
+      conda-lock=3.0.4
+  fi
+}
+
+clean_install() {
   if [[ -d "${ENV_PREFIX}" ]]; then
-    echo "Removing the previous ${ENV_NAME} before applying the new lock ..."
+    echo "Removing ${ENV_NAME} before the clean lock install ..."
     micromamba remove -y -n "${ENV_NAME}" --all
   fi
 
@@ -216,9 +222,35 @@ if [[ "${NEEDS_INSTALL}" == true ]]; then
 
   echo "Checking installed Python dependencies ..."
   micromamba run -n "${ENV_NAME}" python -m pip check
+}
+
+if [[ "${NEEDS_RECONCILE}" == true ]]; then
+  echo "GPU environment is missing or out of date."
+  echo "Canonical lock SHA256: ${LOCK_HASH}"
+  RECONCILE_START="${SECONDS}"
+  ensure_lock_tools
+
+  RECONCILED=false
+  if [[ "${FORCE_REINSTALL}" == false ]] && [[ -x "${ENV_PYTHON}" ]]; then
+    echo "Trying an incremental exact-lock reconciliation first ..."
+    if bash "${REPO_DIR}/scripts/reconcile-conda-lock-env.sh" \
+      --lock "${LOCK_FILE}" \
+      --name "${ENV_NAME}" \
+      --lock-tools-env "${LOCK_TOOLS_ENV}" \
+      --platform linux-64; then
+      RECONCILED=true
+    else
+      echo "Incremental reconciliation failed; falling back to a clean rebuild." >&2
+    fi
+  fi
+
+  if [[ "${RECONCILED}" == false ]]; then
+    clean_install
+  fi
 
   printf '%s\n' "${LOCK_HASH}" > "${LOCK_MARKER}"
   echo "GPU environment now matches conda-lock-gpu.yml."
+  echo "Environment reconcile time: $((SECONDS - RECONCILE_START)) seconds"
 else
   echo "GPU environment already matches the latest canonical lock."
 fi
@@ -246,6 +278,7 @@ echo "Repository:  ${REPO_DIR}"
 echo "Commit:      ${CURRENT_COMMIT}"
 echo "Lock SHA256: ${LOCK_HASH}"
 echo "Environment: ${ENV_NAME}"
+echo "Bootstrap time: $((SECONDS - BOOTSTRAP_START)) seconds"
 
 if [[ "${NO_SHELL}" == true ]]; then
   exit 0
@@ -261,10 +294,6 @@ export AI_RESEARCH_ENV_COMMIT="${CURRENT_COMMIT}"
 export AI_RESEARCH_ENV_LOCK_SHA256="${LOCK_HASH}"
 export AI_RESEARCH_ENV_GPU_ENV_NAME="${ENV_NAME}"
 
-# Use a dedicated rcfile for the launched shell. This avoids modifying ~/.bashrc
-# while still preserving the user's normal interactive Bash setup. Activation is
-# done in the child shell with nounset disabled because some conda activation
-# scripts legitimately probe unset variables.
 SHELL_RC="${STATE_DIR}/efabric-shell.bashrc"
 cat > "${SHELL_RC}" <<EOF
 if [[ -f "\${HOME}/.bashrc" ]]; then
