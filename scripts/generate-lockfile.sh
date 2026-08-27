@@ -80,15 +80,15 @@ if ! "${MAMBA_EXE}" run -n base conda-lock --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# Keep the temporary lock directly beside the requested output. conda-lock stores
-# source paths relative to the lockfile, so a nested temporary directory would
-# change otherwise-identical metadata and defeat byte-for-byte drift checks.
-OUTPUT_DIR="$(
-  cd "$(dirname "${OUTPUT_FILE}")"
+# Always process the working lock beside the canonical lock. Existing lock source
+# metadata is relative to that location, while OUTPUT_FILE may be a CI artifact
+# path elsewhere on disk.
+CANONICAL_DIR="$(
+  cd "$(dirname "${CANONICAL_LOCK}")"
   pwd
 )"
-mkdir -p "${OUTPUT_DIR}"
-TEMP_FILE="$(mktemp "${OUTPUT_DIR}/.conda-lock.tmp.XXXXXX.yml")"
+mkdir -p "$(dirname "${OUTPUT_FILE}")"
+TEMP_FILE="$(mktemp "${CANONICAL_DIR}/.conda-lock.tmp.XXXXXX.yml")"
 
 cleanup() {
   rm -f "${TEMP_FILE}"
@@ -102,8 +102,8 @@ echo "Conda executable: ${MAMBA_EXE}"
 source_args=(--file "${ENVIRONMENT_FILE}")
 if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
   cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
-  # When updating an existing lock, let conda-lock read the source file recorded
-  # by that lock. This avoids merging a second spelling of the same source path.
+  # Let conda-lock read the source path already recorded by the canonical lock,
+  # which preserves its source metadata spelling and existing package solution.
   source_args=()
   echo "Lock strategy:    preserve existing compatible package solutions"
 else
