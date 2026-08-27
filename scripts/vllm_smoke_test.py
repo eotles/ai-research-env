@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import shutil
 import sys
 
 
@@ -12,6 +13,19 @@ def section(title: str) -> None:
     print("=" * 79)
     print(title)
     print("=" * 79)
+
+
+def configure_runtime_defaults() -> None:
+    # vLLM collects anonymous usage statistics by default. Keep the project
+    # research runtime quiet and deterministic unless a caller explicitly opts in.
+    os.environ.setdefault("VLLM_NO_USAGE_STATS", "1")
+
+    # FlashInfer's top-k/top-p sampler can JIT-compile CUDA extensions. Stock
+    # EFabric GPU workspaces expose the CUDA runtime/driver but not nvcc, so use
+    # vLLM's PyTorch-native sampler when a CUDA compiler is unavailable. This
+    # does not disable FlashAttention or other optimized model-attention paths.
+    if shutil.which("nvcc") is None:
+        os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 
 
 def main() -> None:
@@ -30,6 +44,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    configure_runtime_defaults()
+
     import torch
     import vllm
 
@@ -39,6 +55,11 @@ def main() -> None:
     print(f"PyTorch version:     {torch.__version__}")
     print(f"Compiled CUDA:       {torch.version.cuda}")
     print(f"CUDA available:      {torch.cuda.is_available()}")
+    print(
+        "FlashInfer sampler:  "
+        f"{os.environ.get('VLLM_USE_FLASHINFER_SAMPLER', 'upstream default')}"
+    )
+    print(f"Usage stats disabled: {os.environ.get('VLLM_NO_USAGE_STATS', '0')}")
 
     expected_version = os.environ.get("AI_RESEARCH_ENV_VLLM_VERSION")
     if expected_version and vllm.__version__ != expected_version:
