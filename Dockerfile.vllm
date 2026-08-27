@@ -1,0 +1,25 @@
+ARG VLLM_VERSION=0.28.0
+FROM vllm/vllm-openai:v${VLLM_VERSION}
+
+ARG VLLM_VERSION
+ENV AI_RESEARCH_ENV_VLLM_VERSION=${VLLM_VERSION}
+
+WORKDIR /work
+
+# Keep the optimized vLLM/PyTorch/CUDA stack owned by the upstream image, while
+# adding the same basic terminal/resource-inspection tools used by this project.
+USER root
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      ca-certificates \
+      git \
+      jq \
+      openssh-client \
+      time \
+      zsh && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY scripts/vllm_smoke_test.py /opt/ai-research-env/vllm_smoke_test.py
+
+# Preserve the upstream vLLM image entrypoint (`vllm serve`). Override the
+# entrypoint explicitly when an interactive shell or smoke test is desired.
