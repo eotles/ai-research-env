@@ -62,6 +62,7 @@ MODULES = [
 COMMANDS = [
     "java",
     "jupyter",
+    "jq",
     "MEDS_transform-pipeline",
     "ZSACES_label",
 ]
@@ -140,6 +141,29 @@ def check_commands() -> None:
             )
 
         print(f"{command}: {executable}")
+
+
+def check_jq() -> None:
+    """Verify jq starts and reports its version."""
+    result = subprocess.run(
+        ["jq", "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            "jq runtime check failed.\n"
+            f"stdout:\n{result.stdout}\n"
+            f"stderr:\n{result.stderr}"
+        )
+
+    version_output = result.stdout.strip() or result.stderr.strip()
+    if not version_output.startswith("jq-"):
+        raise RuntimeError(f"Unexpected jq version output: {version_output!r}")
+
+    print(version_output)
 
 
 def check_java() -> None:
@@ -287,6 +311,7 @@ def main() -> None:
         ("Installed distribution versions", check_distribution_versions),
         ("Python imports", check_imports),
         ("Command-line tools", check_commands),
+        ("jq runtime", check_jq),
         ("Java runtime", check_java),
         ("PyTorch computation", check_pytorch),
         ("TensorFlow computation", check_tensorflow),
