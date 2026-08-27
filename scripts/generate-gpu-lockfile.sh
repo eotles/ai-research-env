@@ -57,10 +57,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# -----------------------------------------------------------------------------
-# Locate the conda-compatible executable
-# -----------------------------------------------------------------------------
-
 if [[ -z "${MAMBA_EXE:-}" ]]; then
   if command -v micromamba >/dev/null 2>&1; then
     MAMBA_EXE="$(command -v micromamba)"
@@ -74,10 +70,6 @@ if [[ -z "${MAMBA_EXE:-}" ]]; then
   fi
 fi
 
-# -----------------------------------------------------------------------------
-# Validate prerequisites
-# -----------------------------------------------------------------------------
-
 if [[ ! -f "${ENVIRONMENT_FILE}" ]]; then
   echo "Error: environment file not found: ${ENVIRONMENT_FILE}" >&2
   exit 1
@@ -88,20 +80,18 @@ if ! "${MAMBA_EXE}" run -n base conda-lock --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# -----------------------------------------------------------------------------
-# Generate atomically
-# -----------------------------------------------------------------------------
-
-OUTPUT_DIR="$(dirname "${OUTPUT_FILE}")"
-mkdir -p "${OUTPUT_DIR}"
-
-TEMP_DIR="$(
-  mktemp -d "${OUTPUT_DIR}/.conda-lock-gpu.tmp.XXXXXX"
+# Keep the temporary lock directly beside the requested output. conda-lock stores
+# source paths relative to the lockfile, so a nested temporary directory would
+# change otherwise-identical metadata and defeat byte-for-byte drift checks.
+OUTPUT_DIR="$(
+  cd "$(dirname "${OUTPUT_FILE}")"
+  pwd
 )"
-TEMP_FILE="${TEMP_DIR}/conda-lock-gpu.yml"
+mkdir -p "${OUTPUT_DIR}"
+TEMP_FILE="$(mktemp "${OUTPUT_DIR}/.conda-lock-gpu.tmp.XXXXXX.yml")"
 
 cleanup() {
-  rm -rf "${TEMP_DIR}"
+  rm -f "${TEMP_FILE}"
 }
 trap cleanup EXIT
 
@@ -109,8 +99,12 @@ echo "Environment file: ${ENVIRONMENT_FILE}"
 echo "Output lockfile:  ${OUTPUT_FILE}"
 echo "Conda executable: ${MAMBA_EXE}"
 
+source_args=(--file "${ENVIRONMENT_FILE}")
 if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
   cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
+  # When updating an existing lock, let conda-lock read the source file recorded
+  # by that lock. This avoids merging a second spelling of the same source path.
+  source_args=()
   echo "Lock strategy:    preserve existing compatible package solutions"
 else
   echo "Lock strategy:    fresh solve"
@@ -121,7 +115,7 @@ fi
 "${MAMBA_EXE}" run -n base conda-lock \
   --conda "${MAMBA_EXE}" \
   --log-level INFO \
-  --file "${ENVIRONMENT_FILE}" \
+  "${source_args[@]}" \
   --kind lock \
   --lockfile "${TEMP_FILE}"
 
