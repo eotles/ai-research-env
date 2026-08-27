@@ -13,7 +13,7 @@ CUDA packages qualified for `ai-research-env-gpu`.
 The supported vLLM release is defined in:
 
 ```text
-config/vllm.env
+vllm-runtime.env
 ```
 
 The current target is vLLM 0.28.0 with Python 3.12.
@@ -30,7 +30,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/eotles/ai-research-env/main/
 The bootstrap:
 
 1. Updates the persistent `ai-research-env` checkout.
-2. Reads the canonical vLLM version from `config/vllm.env`.
+2. Reads the canonical vLLM version from `vllm-runtime.env`.
 3. Creates an isolated persistent virtual environment at
    `$HOME/.venvs/ai-research-env-vllm`.
 4. Installs vLLM with `uv pip install --torch-backend=auto`, allowing vLLM to
