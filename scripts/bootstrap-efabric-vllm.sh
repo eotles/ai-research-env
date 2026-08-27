@@ -122,10 +122,20 @@ else
   fi
 
   echo "Updating ai-research-env from origin/${BRANCH} ..."
-  git -C "${REPO_DIR}" fetch --prune origin "${BRANCH}"
+  git -C "${REPO_DIR}" fetch \
+    --prune \
+    origin \
+    "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"
 
   if [[ "$(git -C "${REPO_DIR}" branch --show-current)" != "${BRANCH}" ]]; then
-    git -C "${REPO_DIR}" checkout "${BRANCH}"
+    if git -C "${REPO_DIR}" show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+      git -C "${REPO_DIR}" checkout "${BRANCH}"
+    else
+      git -C "${REPO_DIR}" checkout \
+        --track \
+        -b "${BRANCH}" \
+        "origin/${BRANCH}"
+    fi
   fi
 
   git -C "${REPO_DIR}" merge --ff-only "origin/${BRANCH}"
