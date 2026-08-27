@@ -95,24 +95,38 @@ cleanup() {
 }
 trap cleanup EXIT
 
-normalize_seed_source() {
+normalize_lock_metadata() {
   local lock_file="$1"
-  local source_name="$2"
+  local generated_name="${2:-}"
 
-  python - "${lock_file}" "${source_name}" <<'PY'
+  python - "${lock_file}" "${generated_name}" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
-source_name = sys.argv[2]
+generated_name = sys.argv[2]
 text = path.read_text()
-pattern = re.compile(r"(?m)^  sources:\n(?:  - .*\n)+")
-replacement = f"  sources:\n  - {source_name}\n"
-updated, count = pattern.subn(replacement, text, count=1)
+
+source_pattern = re.compile(r"(?m)^  sources:\n(?:  - .*\n)+")
+text, count = source_pattern.subn(
+    "  sources:\n  - environment-gpu.yml\n",
+    text,
+    count=1,
+)
 if count != 1:
-    raise SystemExit("Could not normalize metadata.sources in seeded lockfile")
-path.write_text(updated)
+    raise SystemExit("Could not normalize metadata.sources in GPU lockfile")
+
+if generated_name:
+    text = text.replace(generated_name, "conda-lock-gpu.yml")
+
+text = re.sub(
+    r"(?m)^#     conda-lock -f .*environment-gpu\.yml --lockfile conda-lock-gpu\.yml$",
+    "#     conda-lock -f environment-gpu.yml --lockfile conda-lock-gpu.yml",
+    text,
+)
+
+path.write_text(text)
 PY
 }
 
@@ -122,10 +136,10 @@ echo "Conda executable: ${MAMBA_EXE}"
 
 if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
   cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
-  # Historical lockfiles may contain source paths that reflect the directory in
-  # which they were originally generated. Normalize that metadata before using
-  # the old lock as package constraints, then parse the current source explicitly.
-  normalize_seed_source "${TEMP_FILE}" "environment-gpu.yml"
+  # Historical lockfiles may contain source/header paths that reflect the
+  # directory where they were generated. Normalize them before using the old
+  # lock as package constraints.
+  normalize_lock_metadata "${TEMP_FILE}" "$(basename "${TEMP_FILE}")"
   echo "Lock strategy:    preserve existing compatible package solutions"
 else
   echo "Lock strategy:    fresh solve"
@@ -144,6 +158,12 @@ if [[ ! -s "${TEMP_FILE}" ]]; then
   echo "Error: conda-lock completed but produced no GPU lockfile." >&2
   exit 1
 fi
+
+# conda-lock embeds the supplied lockfile name into instructional comments and
+# records source paths relative to the generated lock. Normalize those fields so
+# the canonical file is byte-stable even though generation uses a random temp
+# filename for atomicity.
+normalize_lock_metadata "${TEMP_FILE}" "$(basename "${TEMP_FILE}")"
 
 mv "${TEMP_FILE}" "${OUTPUT_FILE}"
 
