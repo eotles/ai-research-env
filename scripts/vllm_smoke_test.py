@@ -15,7 +15,7 @@ def section(title: str) -> None:
     print("=" * 79)
 
 
-def configure_runtime_defaults() -> None:
+def configure_runtime_defaults(*, fast_model_smoke: bool) -> None:
     # vLLM collects anonymous usage statistics by default. Keep the project
     # research runtime quiet and deterministic unless a caller explicitly opts in.
     os.environ.setdefault("VLLM_NO_USAGE_STATS", "1")
@@ -26,6 +26,13 @@ def configure_runtime_defaults() -> None:
     # does not disable FlashAttention or other optimized model-attention paths.
     if shutil.which("nvcc") is None:
         os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
+
+    # A real-model smoke test is intended to validate that vLLM can load and
+    # generate, not benchmark production startup. Keeping the V1 engine core in
+    # process avoids a costly Python spawn/import cycle on EFabric. Production
+    # vLLM usage is left at the upstream multiprocessing default.
+    if fast_model_smoke:
+        os.environ.setdefault("VLLM_ENABLE_V1_MULTIPROCESSING", "0")
 
 
 def main() -> None:
@@ -42,9 +49,19 @@ def main() -> None:
         default=None,
         help="Optionally load a model and perform a real vLLM generation.",
     )
+    parser.add_argument(
+        "--full-engine",
+        action="store_true",
+        help=(
+            "Use vLLM's normal multiprocessing/compiled engine for the model "
+            "test instead of the faster smoke-test startup path."
+        ),
+    )
     args = parser.parse_args()
 
-    configure_runtime_defaults()
+    configure_runtime_defaults(
+        fast_model_smoke=bool(args.model) and not args.full_engine,
+    )
 
     import torch
     import vllm
@@ -60,6 +77,11 @@ def main() -> None:
         f"{os.environ.get('VLLM_USE_FLASHINFER_SAMPLER', 'upstream default')}"
     )
     print(f"Usage stats disabled: {os.environ.get('VLLM_NO_USAGE_STATS', '0')}")
+    if args.model:
+        print(
+            "Engine smoke mode:   "
+            + ("full" if args.full_engine else "fast (in-process/eager)")
+        )
 
     expected_version = os.environ.get("AI_RESEARCH_ENV_VLLM_VERSION")
     if expected_version and vllm.__version__ != expected_version:
@@ -97,12 +119,19 @@ def main() -> None:
         from vllm import LLM, SamplingParams
 
         print(f"Model:                {args.model}")
-        llm = LLM(
-            model=args.model,
-            dtype="auto",
-            max_model_len=512,
-            gpu_memory_utilization=0.35,
-        )
+        llm_kwargs = {
+            "model": args.model,
+            "dtype": "auto",
+            "max_model_len": 512,
+            "gpu_memory_utilization": 0.35,
+        }
+        if not args.full_engine:
+            # Avoid torch.compile and CUDA graph capture for the qualification
+            # smoke test. The full production path was separately qualified and
+            # remains vLLM's default outside this script.
+            llm_kwargs["enforce_eager"] = True
+
+        llm = LLM(**llm_kwargs)
         sampling_params = SamplingParams(temperature=0.0, max_tokens=16)
         outputs = llm.generate(
             ["The capital of France is"],
