@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - Dockerfile.vllm
-      - config/vllm.env
+      - vllm-runtime.env
       - scripts/vllm_smoke_test.py
       - .github/workflows/docker-image-vllm.yml
 
@@ -13,7 +13,7 @@ on:
       - main
     paths:
       - Dockerfile.vllm
-      - config/vllm.env
+      - vllm-runtime.env
       - scripts/vllm_smoke_test.py
       - .github/workflows/docker-image-vllm.yml
 
@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          source config/vllm.env
+          source vllm-runtime.env
           echo "VLLM_VERSION=${VLLM_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Set up Docker Buildx
@@ -124,7 +124,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          source config/vllm.env
+          source vllm-runtime.env
           echo "VLLM_VERSION=${VLLM_VERSION}" >> "${GITHUB_ENV}"
 
       - name: Set up Docker Buildx
