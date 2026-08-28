@@ -23,7 +23,18 @@ ENV_NAME="${AI_RESEARCH_ENV_GPU_ENV_NAME:-ai-research-env-gpu}"
 LOCK_TOOLS_ENV="${AI_RESEARCH_ENV_LOCK_TOOLS_ENV_NAME:-ai-env-lock-tools}"
 STATE_DIR="${AI_RESEARCH_ENV_STATE_DIR:-${HOME}/.ai-research-env}"
 
-export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-${HOME}/.micromamba}"
+# EFabric interactive Workspaces typically leave MAMBA_ROOT_PREFIX unset, while
+# non-interactive Jobs may inject the read-only system prefix /opt/conda. The
+# canonical ai-research-env runtime belongs in persistent user home storage, so
+# reject that unwritable system default automatically. A caller that genuinely
+# wants a custom prefix can set AI_RESEARCH_ENV_MAMBA_ROOT_PREFIX explicitly.
+if [[ -n "${AI_RESEARCH_ENV_MAMBA_ROOT_PREFIX:-}" ]]; then
+  export MAMBA_ROOT_PREFIX="${AI_RESEARCH_ENV_MAMBA_ROOT_PREFIX}"
+elif [[ "${MAMBA_ROOT_PREFIX:-}" == "/opt/conda" ]] && [[ ! -w "/opt/conda" ]]; then
+  export MAMBA_ROOT_PREFIX="${HOME}/.micromamba"
+else
+  export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-${HOME}/.micromamba}"
+fi
 export MPLCONFIGDIR="${MPLCONFIGDIR:-${HOME}/.cache/matplotlib}"
 
 FORCE_REINSTALL=false
@@ -57,6 +68,7 @@ Environment overrides:
   AI_RESEARCH_ENV_LOCK_TOOLS_ENV_NAME
   AI_RESEARCH_ENV_STATE_DIR
   AI_RESEARCH_ENV_START_DIR
+  AI_RESEARCH_ENV_MAMBA_ROOT_PREFIX
   MAMBA_ROOT_PREFIX
   MPLCONFIGDIR
 EOF
