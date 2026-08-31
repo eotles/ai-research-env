@@ -82,16 +82,20 @@ fi
 
 # Always process the working lock beside the canonical lock. conda-lock records
 # source paths relative to the lockfile, while OUTPUT_FILE may be a CI artifact
-# path elsewhere on disk.
+# path elsewhere on disk. Use a temporary directory rather than mktemp's file
+# mode so a fresh solve receives a path that does not already exist. conda-lock
+# 3.0.4 tries to parse any existing --lockfile as YAML, including an empty
+# mktemp-created file, which fails before dependency resolution starts.
 CANONICAL_DIR="$(
   cd "$(dirname "${CANONICAL_LOCK}")"
   pwd
 )"
 mkdir -p "$(dirname "${OUTPUT_FILE}")"
-TEMP_FILE="$(mktemp "${CANONICAL_DIR}/.conda-lock-gpu.tmp.XXXXXX.yml")"
+TEMP_DIR="$(mktemp -d "${CANONICAL_DIR}/.conda-lock-gpu.tmp.XXXXXX")"
+TEMP_FILE="${TEMP_DIR}/conda-lock-gpu.yml"
 
 cleanup() {
-  rm -f "${TEMP_FILE}"
+  rm -rf "${TEMP_DIR}"
 }
 trap cleanup EXIT
 
@@ -161,8 +165,8 @@ fi
 
 # conda-lock embeds the supplied lockfile name into instructional comments and
 # records source paths relative to the generated lock. Normalize those fields so
-# the canonical file is byte-stable even though generation uses a random temp
-# filename for atomicity.
+# the canonical file is byte-stable even though generation uses a temporary
+# directory for atomicity.
 normalize_lock_metadata "${TEMP_FILE}" "$(basename "${TEMP_FILE}")"
 
 mv "${TEMP_FILE}" "${OUTPUT_FILE}"
