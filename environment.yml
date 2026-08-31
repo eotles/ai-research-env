@@ -25,6 +25,7 @@ dependencies:
   - pandas
   - scipy
   - scikit-learn
+  - xgboost
   - sympy=1.13.1
 
   # ---------------------------------------------------------------------------
