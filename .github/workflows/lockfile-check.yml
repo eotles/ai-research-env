@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - environment.yml
+      - conda-lock.yml
       - scripts/generate-lockfile.sh
+      - scripts/compare_conda_locks.py
       - .github/workflows/lockfile-check.yml
       - .github/workflows/lockfile-update.yml
 
@@ -19,7 +21,7 @@ concurrency:
 
 jobs:
   solve:
-    name: Solve candidate environment
+    name: Solve and verify candidate environment
     runs-on: ubuntu-24.04
     timeout-minutes: 60
 
@@ -61,10 +63,19 @@ jobs:
 
           bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
 
+      - name: Compare canonical portable lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python scripts/compare_conda_locks.py \
+            conda-lock.yml \
+            "${CANDIDATE_LOCK}"
+
       - name: Upload candidate lock
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: pr-candidate-conda-lock-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-conda-lock.yml
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 14
