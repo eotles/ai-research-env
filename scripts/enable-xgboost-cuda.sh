@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Enable the CUDA-capable XGBoost variant inside the canonical EFabric GPU
-# environment. This is an explicit companion step until the GPU lockfile itself
-# is regenerated with the CUDA XGBoost variant.
+# Build a CUDA-capable XGBoost companion runtime on top of the canonical EFabric
+# GPU environment without mutating the locked conda environment. This mirrors the
+# project's vLLM companion-runtime pattern: scientific/data dependencies remain
+# available through system site packages while the companion wheel supplies a
+# CUDA-enabled XGBoost backend.
 
 ENV_NAME="${AI_RESEARCH_ENV_GPU_ENV_NAME:-ai-research-env-gpu}"
 STATE_DIR="${AI_RESEARCH_ENV_STATE_DIR:-${HOME}/.ai-research-env}"
+COMPANION_DIR="${AI_RESEARCH_ENV_XGBOOST_GPU_VENV:-${HOME}/.venvs/ai-research-env-xgboost-gpu}"
+XGBOOST_VERSION="${AI_RESEARCH_ENV_XGBOOST_VERSION:-3.4.1}"
 
 if [[ -n "${AI_RESEARCH_ENV_MAMBA_ROOT_PREFIX:-}" ]]; then
   export MAMBA_ROOT_PREFIX="${AI_RESEARCH_ENV_MAMBA_ROOT_PREFIX}"
@@ -16,26 +20,25 @@ else
   export MAMBA_ROOT_PREFIX="${MAMBA_ROOT_PREFIX:-${HOME}/.micromamba}"
 fi
 
-command -v micromamba >/dev/null 2>&1 || {
-  echo "Error: micromamba is required." >&2
-  exit 1
-}
-
-if [[ ! -x "${MAMBA_ROOT_PREFIX}/envs/${ENV_NAME}/bin/python" ]]; then
+BASE_PYTHON="${MAMBA_ROOT_PREFIX}/envs/${ENV_NAME}/bin/python"
+if [[ ! -x "${BASE_PYTHON}" ]]; then
   echo "Error: ${ENV_NAME} does not exist. Run bootstrap-efabric-gpu.sh first." >&2
   exit 1
 fi
 
-mkdir -p "${STATE_DIR}"
+mkdir -p "${STATE_DIR}" "$(dirname "${COMPANION_DIR}")"
 
-echo "Installing CUDA-capable XGBoost into ${ENV_NAME} ..."
-micromamba install \
-  -y \
-  -n "${ENV_NAME}" \
-  -c conda-forge \
-  'py-xgboost=3.4.1=*_cuda*'
+if [[ ! -x "${COMPANION_DIR}/bin/python" ]]; then
+  echo "Creating XGBoost GPU companion environment at ${COMPANION_DIR} ..."
+  "${BASE_PYTHON}" -m venv --system-site-packages "${COMPANION_DIR}"
+fi
 
-"${MAMBA_ROOT_PREFIX}/envs/${ENV_NAME}/bin/python" - <<'PY'
+"${COMPANION_DIR}/bin/python" -m pip install \
+  --upgrade \
+  --disable-pip-version-check \
+  "xgboost==${XGBOOST_VERSION}"
+
+"${COMPANION_DIR}/bin/python" - <<'PY'
 import json
 import xgboost as xgb
 
@@ -48,13 +51,15 @@ PY
 
 cat > "${STATE_DIR}/xgboost-cuda-companion.txt" <<EOF
 installed_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-environment=${ENV_NAME}
-xgboost=3.4.1
-variant=cuda
+base_environment=${ENV_NAME}
+companion=${COMPANION_DIR}
+xgboost=${XGBOOST_VERSION}
+variant=cuda-wheel
 EOF
 
 echo
 echo "CUDA XGBoost companion runtime ready."
-echo "Environment: ${ENV_NAME}"
-echo "State:       ${STATE_DIR}/xgboost-cuda-companion.txt"
-echo "Note: an exact GPU lock reconciliation may restore the CPU XGBoost variant; rerun this companion step until conda-lock-gpu.yml is regenerated for CUDA XGBoost."
+echo "Base environment: ${ENV_NAME}"
+echo "Companion:        ${COMPANION_DIR}"
+echo "Python:           ${COMPANION_DIR}/bin/python"
+echo "State:            ${STATE_DIR}/xgboost-cuda-companion.txt"
