@@ -9,3 +9,4 @@
 /conda-lock.yml @eotles
 /conda-lock-gpu.yml @eotles
 /Dockerfile* @eotles
+/docs/repository-protection.md @eotles

@@ -1,18 +1,9 @@
 name: workflow-lint
 
 on:
+  # This workflow is intentionally unfiltered for pull requests so it can be
+  # configured as an always-present required status check on main.
   pull_request:
-    paths:
-      - ".github/**"
-      - "AGENTS.md"
-      - "README.md"
-      - "Dockerfile*"
-      - "environment.yml"
-      - "environment-gpu.yml"
-      - "conda-lock.yml"
-      - "conda-lock-gpu.yml"
-      - "scripts/**"
-      - "config/**"
 
   push:
     branches:

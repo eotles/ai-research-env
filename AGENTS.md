@@ -42,6 +42,16 @@ For environment changes:
 6. Diagnose any failure without weakening the check that found it.
 7. Merge only after the intended required checks are green.
 
+## Branch-level protection
+
+The `lint` job in `.github/workflows/workflow-lint.yml` is intended to be the stable GitHub-required status check for `main`.
+
+It must remain present on every pull request. Do not add pull-request path filtering to `workflow-lint.yml`, rename the `lint` job, or otherwise make that check conditional without treating the change as an explicit repository-protection change.
+
+The heavier environment and Docker workflows are path-sensitive. When they are triggered, their failures must still be resolved before merge even though they are not globally required status checks in the GitHub ruleset.
+
+See `docs/repository-protection.md` for the expected GitHub ruleset.
+
 ## CI and workflow permissions
 
 Pull-request validation should be read-only. Workflows that also publish artifacts or images should grant write permissions only to the publishing job, and that job must not run for pull-request events.
@@ -62,5 +72,6 @@ Changes to these files deserve explicit review because they define or enforce re
 - `conda-lock.yml`
 - `conda-lock-gpu.yml`
 - `Dockerfile*`
+- `docs/repository-protection.md`
 
 Read `README.md` for the current environment architecture, update workflow, and validation model before making maintenance changes.

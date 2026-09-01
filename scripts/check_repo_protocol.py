@@ -73,6 +73,30 @@ def workflow_has_pull_request(text: str) -> bool:
     )
 
 
+def pull_request_has_path_filter(text: str) -> bool:
+    """Return True when the pull_request trigger is limited by path filters."""
+    event_block = top_level_block(text, "on")
+    if event_block is None:
+        return False
+
+    inline, block = event_block
+    if "pull_request" in inline:
+        return False
+
+    for index, line in enumerate(block):
+        if not re.match(r"^\s{2}pull_request\s*:", line):
+            continue
+
+        for following in block[index + 1 :]:
+            if re.match(r"^\s{2}[A-Za-z0-9_-]+\s*:", following):
+                break
+            if re.match(r"^\s{4}(?:paths|paths-ignore)\s*:", following):
+                return True
+        return False
+
+    return False
+
+
 def top_level_permissions_grant_write(text: str) -> bool:
     permission_block = top_level_block(text, "permissions")
     if permission_block is None:
@@ -130,8 +154,33 @@ def check_static(errors: list[str]) -> None:
     workflow_lint = ROOT / ".github/workflows/workflow-lint.yml"
     if not workflow_lint.is_file():
         fail(errors, "workflow-lint.yml is missing")
-    elif "scripts/check_repo_protocol.py" not in workflow_lint.read_text():
-        fail(errors, "workflow-lint.yml must run scripts/check_repo_protocol.py")
+    else:
+        workflow_lint_text = workflow_lint.read_text()
+        if "scripts/check_repo_protocol.py" not in workflow_lint_text:
+            fail(errors, "workflow-lint.yml must run scripts/check_repo_protocol.py")
+        if not workflow_has_pull_request(workflow_lint_text):
+            fail(errors, "workflow-lint.yml must run on pull requests")
+        if pull_request_has_path_filter(workflow_lint_text):
+            fail(
+                errors,
+                "workflow-lint.yml pull_request trigger must remain unfiltered so the "
+                "required lint status is present on every PR.",
+            )
+        if not re.search(r"(?m)^\s{2}lint\s*:\s*$", workflow_lint_text):
+            fail(
+                errors,
+                "workflow-lint.yml must retain the stable `lint` job used by main "
+                "branch protection.",
+            )
+
+    protection_doc = ROOT / "docs/repository-protection.md"
+    if not protection_doc.is_file():
+        fail(errors, "docs/repository-protection.md is missing")
+    elif "`lint`" not in protection_doc.read_text():
+        fail(
+            errors,
+            "docs/repository-protection.md must document the required `lint` check",
+        )
 
     for path, lock_name in DOCKER_LOCK_REQUIREMENTS.items():
         full_path = ROOT / path
