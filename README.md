@@ -318,7 +318,7 @@ The CPU, GPU, and vLLM Docker workflows use read-only permissions during pull-re
 
 ### Repository protocol check
 
-`workflow-lint` runs `scripts/check_repo_protocol.py`. The protocol checker:
+`workflow-lint` runs on every pull request and provides the stable `lint` check intended for branch-level protection. It runs `scripts/check_repo_protocol.py`, which:
 
 - requires environment or lock-generator changes to include the matching canonical lockfile
 - requires both portable and GPU lock checks to retain strict candidate-versus-canonical validation
@@ -326,6 +326,8 @@ The CPU, GPU, and vLLM Docker workflows use read-only permissions during pull-re
 - prevents pull-request workflows from granting write permission at workflow scope
 - rejects newly added write-enabled workflows
 - runs alongside `actionlint`, `shellcheck`, and Python syntax checks
+
+The heavier lock, install, and Docker workflows remain path-sensitive. When triggered, they must still be allowed to finish and should be green before merge. They should not be configured as global required checks unless their trigger model is changed so the check is present on every pull request.
 
 ## Repository contents
 
@@ -352,15 +354,20 @@ Key files:
 - `docs/efabric-cpu.md`: EFabric CPU documentation
 - `docs/gpu.md`: GPU and EFabric GPU documentation
 - `docs/vllm.md`: vLLM companion runtime documentation
+- `docs/repository-protection.md`: exact GitHub `main` protection guidance
 
 ## Recommended GitHub repository settings
 
-The repository files provide the guardrails, but GitHub should also enforce them at the branch level. For `main`, enable a ruleset or branch protection that:
+The repository files provide the guardrails, but GitHub should also enforce them at the branch level. For `main`, use an active branch ruleset that:
 
+- prevents force pushes and deletion of `main`
 - requires pull requests before merge
-- requires the repository protocol / workflow lint check and relevant environment checks to pass
-- requires review from Code Owners for protocol-critical files
-- dismisses stale approvals when new commits are pushed
-- prevents force pushes and branch deletion
+- requires the always-present GitHub Actions status check named `lint`
+- requires branches to be up to date before merge
+- requires conversation resolution before merge
 
-These settings make changes to the guardrails themselves visible to, and explicitly approved by, the repository owner.
+The repository currently has one effective human reviewer. Do not require Code Owner approval until an independent reviewer is available, because the author cannot provide an independent approval for their own pull request. `.github/CODEOWNERS` should still be retained for ownership visibility.
+
+The path-sensitive environment and Docker checks should not be configured as global required checks in the current design, because they do not run for unrelated pull requests. They remain mandatory by repository maintenance policy whenever they are triggered.
+
+See [`docs/repository-protection.md`](docs/repository-protection.md) for the exact ruleset configuration and rationale.
