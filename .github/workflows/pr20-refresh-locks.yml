@@ -1,0 +1,65 @@
+name: pr20-refresh-locks
+
+on:
+  push:
+    branches:
+      - chatgpt/add-xgboost-fix-gpu-lock-refresh
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+        with:
+          ref: chatgpt/add-xgboost-fix-gpu-lock-refresh
+          fetch-depth: 0
+
+      - name: Set up micromamba
+        uses: mamba-org/setup-micromamba@v3
+        with:
+          micromamba-version: "2.8.1-0"
+          cache-downloads: true
+
+      - name: Install conda-lock
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          micromamba install -y -n base -c conda-forge "conda-lock=3.0.4"
+
+      - name: Regenerate canonical locks
+        shell: bash
+        env:
+          CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
+        run: |
+          set -Eeuo pipefail
+
+          CPU_LOCK="${RUNNER_TEMP}/conda-lock.yml"
+          GPU_LOCK="${RUNNER_TEMP}/conda-lock-gpu.yml"
+
+          bash scripts/generate-lockfile.sh "${CPU_LOCK}"
+          bash scripts/generate-gpu-lockfile.sh "${GPU_LOCK}"
+
+          cp "${CPU_LOCK}" conda-lock.yml
+          cp "${GPU_LOCK}" conda-lock-gpu.yml
+
+      - name: Commit refreshed locks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if git diff --quiet -- conda-lock.yml conda-lock-gpu.yml; then
+            echo "Canonical lockfiles already match the environment definitions."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add conda-lock.yml conda-lock-gpu.yml
+          git commit -m "Refresh canonical lockfiles for XGBoost"
+          git push origin HEAD:chatgpt/add-xgboost-fix-gpu-lock-refresh
