@@ -6,6 +6,7 @@ on:
       - environment-gpu.yml
       - conda-lock-gpu.yml
       - scripts/generate-gpu-lockfile.sh
+      - scripts/compare_conda_locks.py
       - .github/workflows/gpu-lockfile-check.yml
 
   workflow_dispatch:
@@ -71,48 +72,9 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-
-          if [[ ! -f conda-lock-gpu.yml ]]; then
-            echo "::error::conda-lock-gpu.yml is missing."
-            exit 1
-          fi
-
-          # Older canonical locks may contain generation-directory paths in
-          # instructional comments and metadata.sources. Normalize both files
-          # before comparison so CI checks dependency/package drift, not legacy
-          # path spelling. New generator output is already canonicalized.
-          python - conda-lock-gpu.yml "${CANDIDATE_LOCK}" <<'PY'
-          from pathlib import Path
-          import re
-          import sys
-
-          def normalize(path: Path) -> str:
-              text = path.read_text()
-              text = re.sub(
-                  r"(?m)^  sources:\n(?:  - .*\n)+",
-                  "  sources:\n  - environment-gpu.yml\n",
-                  text,
-                  count=1,
-              )
-              text = re.sub(
-                  r"(?m)^#     conda-lock -f .*environment-gpu\.yml --lockfile conda-lock-gpu\.yml$",
-                  "#     conda-lock -f environment-gpu.yml --lockfile conda-lock-gpu.yml",
-                  text,
-              )
-              text = re.sub(
-                  r"\.conda-lock-gpu\.tmp\.[A-Za-z0-9]+\.yml",
-                  "conda-lock-gpu.yml",
-                  text,
-              )
-              return text
-
-          canonical = normalize(Path(sys.argv[1]))
-          candidate = normalize(Path(sys.argv[2]))
-          if canonical != candidate:
-              raise SystemExit("GPU lockfile dependency/package drift detected")
-          PY
-
-          echo "GPU dependency/package lock matches conda-lock-gpu.yml."
+          python scripts/compare_conda_locks.py \
+            conda-lock-gpu.yml \
+            "${CANDIDATE_LOCK}"
 
       - name: Upload candidate GPU lock
         if: always()

@@ -3,7 +3,14 @@ name: workflow-lint
 on:
   pull_request:
     paths:
-      - ".github/workflows/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "README.md"
+      - "Dockerfile*"
+      - "environment.yml"
+      - "environment-gpu.yml"
+      - "conda-lock.yml"
+      - "conda-lock-gpu.yml"
       - "scripts/**"
       - "config/**"
 
@@ -11,7 +18,14 @@ on:
     branches:
       - main
     paths:
-      - ".github/workflows/**"
+      - ".github/**"
+      - "AGENTS.md"
+      - "README.md"
+      - "Dockerfile*"
+      - "environment.yml"
+      - "environment-gpu.yml"
+      - "conda-lock.yml"
+      - "conda-lock-gpu.yml"
       - "scripts/**"
       - "config/**"
 
@@ -31,11 +45,29 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Check repository protocol
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python scripts/check_repo_protocol.py \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}"
+
+      - name: Check static repository protocol
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python scripts/check_repo_protocol.py
 
       - name: Install ShellCheck
         shell: bash

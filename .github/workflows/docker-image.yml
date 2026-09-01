@@ -29,7 +29,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: docker-image-${{ github.ref }}
@@ -150,6 +149,10 @@ jobs:
         github.event_name == 'workflow_dispatch' &&
         inputs.push_image
       )
+
+    permissions:
+      contents: read
+      packages: write
 
     runs-on: ubuntu-24.04
     timeout-minutes: 120

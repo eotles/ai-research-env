@@ -1,0 +1,11 @@
+# Protocol-critical repository files
+/AGENTS.md @eotles
+/.github/CODEOWNERS @eotles
+/.github/workflows/ @eotles
+/scripts/check_repo_protocol.py @eotles
+/scripts/compare_conda_locks.py @eotles
+/environment.yml @eotles
+/environment-gpu.yml @eotles
+/conda-lock.yml @eotles
+/conda-lock-gpu.yml @eotles
+/Dockerfile* @eotles
