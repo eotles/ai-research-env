@@ -13,16 +13,9 @@ on:
     - cron: "47 10 * * 1"
 
   workflow_dispatch:
-    inputs:
-      commit_lockfile:
-        description: "Commit the regenerated GPU lockfile if it changed"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
-  contents: write
-  actions: write
+  contents: read
 
 concurrency:
   group: gpu-lockfile-update
@@ -114,7 +107,12 @@ jobs:
             echo "**Drift detected:** yes" >> "${GITHUB_STEP_SUMMARY}"
             echo "::warning::No committed conda-lock-gpu.yml exists."
           elif ! cmp -s conda-lock-gpu.yml "${CANDIDATE_LOCK}"; then
-            echo "**Drift detected:** yes" >> "${GITHUB_STEP_SUMMARY}"
+            {
+              echo "**Drift detected:** yes"
+              echo
+              echo "The candidate lock is available as a workflow artifact."
+              echo "Update the canonical lock on a branch and merge it through the normal pull-request checks."
+            } >> "${GITHUB_STEP_SUMMARY}"
             echo "::warning::GPU dependency solve produced lockfile drift."
             diff --brief conda-lock-gpu.yml "${CANDIDATE_LOCK}" || true
           else
@@ -131,47 +129,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Commit and push changed GPU lockfile
-        id: commit_lockfile
-        if: >
-          steps.generate.outcome == 'success' &&
-          (
-            github.event_name == 'push' ||
-            (
-              github.event_name == 'workflow_dispatch' &&
-              inputs.commit_lockfile
-            )
-          )
+      - name: Report read-only maintenance behavior
+        if: steps.generate.outcome == 'success'
         shell: bash
         run: |
-          set -Eeuo pipefail
-
-          if [[ ! -f conda-lock-gpu.yml ]] || \
-             ! cmp -s conda-lock-gpu.yml "${CANDIDATE_LOCK}"; then
-            cp "${CANDIDATE_LOCK}" conda-lock-gpu.yml
-
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add conda-lock-gpu.yml
-            git commit -m "Update canonical GPU conda lockfile"
-            git push
-
-            echo "changed=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "No GPU lockfile changes to commit."
-            echo "changed=false" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Trigger GPU Docker image workflow
-        if: steps.commit_lockfile.outputs.changed == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -Eeuo pipefail
-          gh workflow run docker-image-gpu.yml \
-            --ref main \
-            -f push_image=true
+          {
+            echo
+            echo "## Maintenance behavior"
+            echo
+            echo "This workflow is read-only with respect to the repository."
+            echo "It never commits or pushes directly to \`main\`."
+            echo "Any canonical lockfile update must be proposed and validated in a pull request."
+          } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Fail workflow if GPU lockfile generation failed
         if: steps.generate.outcome != 'success'
