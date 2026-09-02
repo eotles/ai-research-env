@@ -9,6 +9,7 @@ CUDA-enabled PyTorch build. GPU-backed systems such as EFabric run it with
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import subprocess
@@ -114,6 +115,23 @@ def validate_cuda_build() -> None:
     print("PASS: CUDA-enabled PyTorch build is present.")
 
 
+def validate_xgboost_cuda_build() -> None:
+    section("CUDA-enabled XGBoost build")
+
+    import xgboost as xgb
+
+    build_info = dict(xgb.build_info())
+    print(f"XGBoost version: {xgb.__version__}")
+    print(f"CUDA backend built: {build_info.get('USE_CUDA')}")
+
+    require(
+        build_info.get("USE_CUDA") is True,
+        "XGBoost was not built with CUDA support.",
+    )
+
+    print("PASS: CUDA-enabled XGBoost build is present.")
+
+
 def validate_device() -> None:
     section("CUDA device")
 
@@ -200,6 +218,47 @@ def validate_transformers_forward() -> None:
     print("PASS: Transformers CUDA forward pass succeeded.")
 
 
+def validate_xgboost_training() -> None:
+    section("XGBoost CUDA training")
+
+    import numpy as np
+    import xgboost as xgb
+
+    rng = np.random.default_rng(23)
+    features = rng.normal(size=(512, 16)).astype(np.float32)
+    labels = (
+        features[:, 0] + 0.5 * features[:, 1] - 0.25 * features[:, 2] > 0
+    ).astype(np.float32)
+    matrix = xgb.DMatrix(features, label=labels)
+
+    booster = xgb.train(
+        {
+            "device": "cuda",
+            "tree_method": "hist",
+            "objective": "binary:logistic",
+            "max_depth": 3,
+            "seed": 23,
+        },
+        matrix,
+        num_boost_round=4,
+    )
+
+    config = json.loads(booster.save_config())
+    device = config["learner"]["generic_param"]["device"]
+    require(device.startswith("cuda"), f"XGBoost trained on unexpected device: {device}")
+
+    predictions = booster.predict(matrix)
+    require(
+        predictions.shape == labels.shape,
+        f"Unexpected XGBoost prediction shape: {predictions.shape}",
+    )
+    require(np.isfinite(predictions).all(), "XGBoost produced non-finite predictions.")
+
+    print(f"Training device: {device}")
+    print(f"Prediction mean: {float(predictions.mean()):.6f}")
+    print("PASS: XGBoost CUDA training succeeded.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -212,12 +271,14 @@ def main() -> int:
     try:
         validate_runtime_defaults()
         validate_cuda_build()
+        validate_xgboost_cuda_build()
 
         if args.require_cuda:
             validate_device()
             validate_bf16_matmul()
             validate_sdpa()
             validate_transformers_forward()
+            validate_xgboost_training()
         else:
             section("Hardware qualification")
             print("CUDA execution was not required for this run.")

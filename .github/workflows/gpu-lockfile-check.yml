@@ -22,6 +22,8 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
+    env:
+      CONDA_OVERRIDE_CUDA: "12.4"
 
     steps:
       - name: Check out repository
@@ -63,10 +65,45 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          grep -F "name: pytorch-cuda" "${CANDIDATE_LOCK}"
-          grep -F "version: '12.4'" "${CANDIDATE_LOCK}" || \
-            grep -F 'version: "12.4"' "${CANDIDATE_LOCK}" || \
-            grep -F "version: 12.4" "${CANDIDATE_LOCK}"
+          "${MAMBA_EXE}" run -n base python - "${CANDIDATE_LOCK}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          import yaml
+
+          lock_path = Path(sys.argv[1])
+          packages = yaml.safe_load(lock_path.read_text())["package"]
+
+          def selected(name: str) -> list[dict[str, object]]:
+              return [
+                  package
+                  for package in packages
+                  if package["platform"] == "linux-64" and package["name"] == name
+              ]
+
+          pytorch_cuda = selected("pytorch-cuda")
+          if len(pytorch_cuda) != 1 or str(pytorch_cuda[0]["version"]) != "12.4":
+              raise SystemExit("GPU lock does not contain pytorch-cuda 12.4")
+
+          for name in ("libxgboost", "py-xgboost"):
+              matches = selected(name)
+              if len(matches) != 1 or matches[0]["manager"] != "conda":
+                  raise SystemExit(f"GPU lock must contain exactly one conda {name} package")
+
+              url = str(matches[0]["url"])
+              if "cuda129" not in url or "cpu" in url:
+                  raise SystemExit(f"GPU lock selected a non-CUDA-12 {name} package: {url}")
+
+              print(f"CUDA XGBoost package: {url}")
+
+          if selected("xgboost"):
+              raise SystemExit("GPU lock must not contain the CPU-oriented xgboost metapackage")
+
+          nccl = selected("nccl")
+          if len(nccl) != 1 or "conda-forge" not in str(nccl[0]["url"]):
+              raise SystemExit("GPU lock must contain the compatible conda-forge NCCL package")
+          print(f"XGBoost NCCL package: {nccl[0]['url']}")
+          PY
 
       - name: Compare canonical GPU lock
         shell: bash

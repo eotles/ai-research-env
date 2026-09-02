@@ -14,7 +14,10 @@ channels:
   - conda-forge
   - defaults
 
-channel_priority: strict
+# CUDA XGBoost requires conda-forge's newer NCCL build. Flexible priority keeps
+# the explicit PyTorch/CUDA packages on their preferred channels while allowing
+# that compatible lower-priority dependency to be selected.
+channel_priority: flexible
 
 dependencies:
   # ---------------------------------------------------------------------------
@@ -31,7 +34,9 @@ dependencies:
   - pandas
   - scipy
   - scikit-learn
-  - xgboost
+  # Pin the CUDA 12-family conda-forge build. The generic XGBoost metapackage
+  # selects a CPU build when the lock is generated without physical GPU access.
+  - "conda-forge::py-xgboost=3.4.1=cuda129*"
   - sympy=1.13.1
 
   # ---------------------------------------------------------------------------
@@ -63,6 +68,10 @@ dependencies:
   # ---------------------------------------------------------------------------
   # Data I/O and local analytics
   # ---------------------------------------------------------------------------
+  # Keep Arrow on its established CPU build. Advertising a CUDA virtual package
+  # for XGBoost otherwise causes conda-forge to select unrelated CUDA Arrow
+  # variants that are not part of this environment's GPU qualification scope.
+  - "conda-forge::libarrow=*=*_cpu"
   - pyarrow
   - duckdb
   - polars
@@ -112,7 +121,7 @@ dependencies:
   # environment. The GPU target is currently qualified around PyTorch, not
   # TensorFlow GPU execution.
   # ---------------------------------------------------------------------------
-  - tensorflow=2.18.*
+  - "conda-forge::tensorflow=2.18.*=cpu*"
 
   # ---------------------------------------------------------------------------
   # MEDS ecosystem

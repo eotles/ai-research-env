@@ -122,6 +122,7 @@ Current GPU target:
 - torchvision 0.20.1
 - torchaudio 2.5.1
 - CUDA runtime 12.4 through `pytorch-cuda=12.4`
+- XGBoost 3.4.1 with CUDA support
 - Transformers 4.48.3
 - Hugging Face Accelerate
 - BF16-capable PyTorch workloads
@@ -156,7 +157,7 @@ Real GPU qualification is performed with:
 python /opt/ai-research-env/gpu_smoke_test.py --require-cuda
 ```
 
-That test exercises CUDA visibility, BF16 matrix multiplication, scaled dot-product attention, and a small Transformers forward pass on the GPU. The PyTorch 2.5.1 / CUDA 12.4 stack has been qualified on an NVIDIA RTX A5000 on EFabric.
+That test exercises CUDA visibility, BF16 matrix multiplication, scaled dot-product attention, a small Transformers forward pass, and XGBoost training on the GPU. The PyTorch 2.5.1 / CUDA 12.4 stack has been qualified on an NVIDIA RTX A5000 on EFabric.
 
 See [`docs/gpu.md`](docs/gpu.md) for detailed GPU design, qualification, and manual installation guidance.
 

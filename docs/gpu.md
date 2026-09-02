@@ -34,10 +34,16 @@ Current target:
 - torchvision 0.20.1
 - torchaudio 2.5.1
 - CUDA runtime 12.4 through `pytorch-cuda=12.4`
+- XGBoost 3.4.1 with CUDA support
 - Transformers 4.48.3
 - the same general scientific, MEDS, Jupyter, Git, and Zsh tooling as the portable image
 
 The image contains the CUDA runtime required by PyTorch. It does not include `nvcc` or a general-purpose CUDA compiler toolchain.
+
+The GPU specification uses flexible channel priority because CUDA XGBoost needs
+the compatible NCCL build from conda-forge. PyTorch and the CUDA 12.4 runtime
+remain explicitly pinned to their established packages, and Arrow remains on
+its CPU build because GPU Arrow is outside the qualification scope.
 
 The host must provide a compatible NVIDIA driver and expose the GPU to the container runtime.
 
@@ -159,6 +165,7 @@ The normal GPU CI run verifies that:
 - the Linux CUDA environment resolves and installs
 - PyTorch is built with CUDA support
 - `torch.version.cuda` reports CUDA 12.4
+- XGBoost is built with CUDA support
 - the general scientific environment passes its smoke tests
 - Git, Zsh, and Jupyter terminal configuration work
 - the GPU Docker image builds successfully
@@ -184,6 +191,7 @@ This additionally requires and exercises:
 - BF16 matrix multiplication
 - PyTorch scaled dot-product attention
 - a small Hugging Face Transformers model forward pass on CUDA
+- a small XGBoost training job on CUDA
 - finite model outputs
 
 The EFabric launcher's `--smoke-test` option runs both the general environment smoke test and this real-GPU qualification.
