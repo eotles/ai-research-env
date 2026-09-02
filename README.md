@@ -59,7 +59,7 @@ Dependency-changing pull requests must include their corresponding canonical loc
 
 PR lock checks independently re-resolve the environment and verify that the committed canonical lock matches the candidate. Native install checks and Docker checks then validate the proposed repository state.
 
-The post-merge `lockfile-update` and `gpu-lockfile-update` workflows remain useful as safety, drift-monitoring, and publication mechanisms. They are not substitutes for committing a matching lockfile in the dependency-changing PR.
+The post-merge `lockfile-update` and `gpu-lockfile-update` workflows remain useful as read-only safety and drift-monitoring mechanisms. They may upload a candidate lockfile for inspection, but canonical lockfile changes must be made on a branch and merged through the normal pull-request validation path.
 
 Coding agents and automated maintainers must follow [`AGENTS.md`](AGENTS.md). Protocol-critical files are listed in [`.github/CODEOWNERS`](.github/CODEOWNERS), and pull requests include a repository-protocol checklist.
 
@@ -305,6 +305,7 @@ Generated lockfiles should never be hand-edited.
 - `.github/workflows/lockfile-check.yml` resolves the portable specification and requires semantic equality with `conda-lock.yml`.
 - `.github/workflows/gpu-lockfile-check.yml` resolves the GPU specification, validates the CUDA package target, and requires semantic equality with `conda-lock-gpu.yml`.
 - `scripts/compare_conda_locks.py` ignores only non-semantic generation-path metadata when comparing locks.
+- `lockfile-update` and `gpu-lockfile-update` are repository-read-only drift monitors. They upload candidate locks for inspection and never push generated changes directly to `main`.
 
 ### Install checks
 
@@ -323,6 +324,7 @@ The CPU, GPU, and vLLM Docker workflows use read-only permissions during pull-re
 
 - requires environment or lock-generator changes to include the matching canonical lockfile
 - requires both portable and GPU lock checks to retain strict candidate-versus-canonical validation
+- requires the post-merge lock maintenance workflows to remain read-only and never push directly to protected branches
 - verifies that the CPU and GPU Dockerfiles continue to consume canonical lockfiles
 - prevents pull-request workflows from granting write permission at workflow scope
 - rejects newly added write-enabled workflows
