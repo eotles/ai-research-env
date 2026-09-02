@@ -42,6 +42,8 @@ For environment changes:
 6. Diagnose any failure without weakening the check that found it.
 7. Merge only after the intended required checks are green.
 
+Portable lock solving is scoped to actual portable dependency inputs: `environment.yml`, `conda-lock.yml`, `scripts/generate-lockfile.sh`, and `scripts/compare_conda_locks.py`. A pull request that changes only CI or maintenance workflow code does not need a fresh five-platform dependency solve. Those workflow-only changes remain covered by the always-on `lint` workflow and repository protocol checks. This separation prevents unrelated upstream package-repository drift from blocking CI-maintenance changes without exempting dependency-changing pull requests from strict lock validation.
+
 ## Branch-level protection
 
 The `lint` job in `.github/workflows/workflow-lint.yml` is intended to be the stable GitHub-required status check for `main`.
