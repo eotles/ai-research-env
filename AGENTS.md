@@ -28,7 +28,7 @@ bash scripts/generate-gpu-lockfile.sh
 
 Do not edit generated lockfiles manually.
 
-The post-merge `lockfile-update` and `gpu-lockfile-update` workflows are safety and drift-maintenance mechanisms. They are not substitutes for committing a matching canonical lockfile in a dependency-changing pull request.
+The post-merge `lockfile-update` and `gpu-lockfile-update` workflows are read-only safety and drift-monitoring mechanisms. They may resolve and upload candidate lockfiles, but they must never commit or push directly to `main`. Canonical lockfile changes belong on a branch and must pass the normal pull-request validation path.
 
 ## Required validation sequence
 
@@ -55,6 +55,8 @@ See `docs/repository-protection.md` for the expected GitHub ruleset.
 ## CI and workflow permissions
 
 Pull-request validation should be read-only. Workflows that also publish artifacts or images should grant write permissions only to the publishing job, and that job must not run for pull-request events.
+
+The lock maintenance workflows are additionally required to remain repository-read-only because `main` is pull-request protected. They can report drift and upload candidate lock artifacts, but they cannot push canonical lock changes or dispatch publication based on an unreviewed generated lock.
 
 New workflows must start read-only. If new write behavior is genuinely required, treat it as an explicit repository-protocol change and obtain repository-owner review.
 
