@@ -22,8 +22,8 @@ LOCK_PAIRS = {
 
 LOCK_CHECK_REQUIREMENTS = {
     ".github/workflows/lockfile-check.yml": (
-        "cp conda-lock.yml",
-        "--file environment.yml",
+        "id: lock_inputs",
+        "scripts/generate-lockfile.sh",
         "scripts/compare_conda_locks.py",
         "conda-lock.yml",
     ),
