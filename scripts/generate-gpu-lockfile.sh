@@ -138,6 +138,12 @@ echo "Environment file: ${ENVIRONMENT_FILE}"
 echo "Output lockfile:  ${OUTPUT_FILE}"
 echo "Conda executable: ${MAMBA_EXE}"
 
+# GPU lock generation also runs on GitHub-hosted workers without NVIDIA
+# hardware. Model the canonical CUDA target in conda-lock's synthetic virtual
+# package repository so CUDA-only variants resolve reproducibly.
+CUDA_VERSION="${CONDA_OVERRIDE_CUDA:-12.4}"
+echo "CUDA target:      ${CUDA_VERSION}"
+
 if [[ "${REFRESH}" == false ]] && [[ -s "${CANONICAL_LOCK}" ]]; then
   cp "${CANONICAL_LOCK}" "${TEMP_FILE}"
   # Historical lockfiles may contain source/header paths that reflect the
@@ -150,9 +156,11 @@ else
 fi
 
 # Do not pass --without-cuda here. The purpose of this target is to resolve and
-# retain the CUDA runtime selected by pytorch-cuda=12.4.
+# retain the CUDA runtime selected by pytorch-cuda=12.4 and CUDA-capable variants
+# of packages such as XGBoost.
 "${MAMBA_EXE}" run -n base conda-lock \
   --conda "${MAMBA_EXE}" \
+  --with-cuda "${CUDA_VERSION}" \
   --log-level INFO \
   --file "${ENVIRONMENT_FILE}" \
   --kind lock \
