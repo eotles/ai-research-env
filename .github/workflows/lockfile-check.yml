@@ -54,14 +54,25 @@ jobs:
             -c conda-forge \
             "conda-lock=3.0.4"
 
-      - name: Generate candidate lock
+      - name: Generate compatibility-preserving candidate lock
         shell: bash
         env:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
         run: |
           set -Eeuo pipefail
 
-          bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
+          # Seed conda-lock with the committed solution. This verifies that the
+          # canonical packages remain compatible with environment.yml without
+          # turning unrelated upstream package releases into PR failures.
+          cp conda-lock.yml "${CANDIDATE_LOCK}"
+
+          "${MAMBA_EXE}" run -n base conda-lock \
+            --conda "${MAMBA_EXE}" \
+            --without-cuda \
+            --log-level INFO \
+            --file environment.yml \
+            --kind lock \
+            --lockfile "${CANDIDATE_LOCK}"
 
       - name: Compare canonical portable lock
         shell: bash
