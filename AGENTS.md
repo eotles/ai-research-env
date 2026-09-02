@@ -28,7 +28,7 @@ bash scripts/generate-gpu-lockfile.sh
 
 Do not edit generated lockfiles manually.
 
-The post-merge `lockfile-update` and `gpu-lockfile-update` workflows are safety and drift-maintenance mechanisms. They are not substitutes for committing a matching canonical lockfile in a dependency-changing pull request.
+The post-merge `lockfile-update` and `gpu-lockfile-update` workflows are read-only safety and drift-monitoring mechanisms. They may resolve and upload candidate lockfiles, but they must never commit or push directly to `main`. Canonical lockfile changes belong on a branch and must pass the normal pull-request validation path.
 
 ## Required validation sequence
 
@@ -41,6 +41,8 @@ For environment changes:
 5. Let native install checks and Docker image checks run against the proposed repository state.
 6. Diagnose any failure without weakening the check that found it.
 7. Merge only after the intended required checks are green.
+
+Portable lock solving is scoped to actual portable dependency inputs: `environment.yml`, `conda-lock.yml`, `scripts/generate-lockfile.sh`, and `scripts/compare_conda_locks.py`. A pull request that changes only CI or maintenance workflow code does not need a fresh five-platform dependency solve. Those workflow-only changes remain covered by the always-on `lint` workflow and repository protocol checks. This separation prevents unrelated upstream package-repository drift from blocking CI-maintenance changes without exempting dependency-changing pull requests from strict lock validation.
 
 ## Branch-level protection
 
@@ -55,6 +57,8 @@ See `docs/repository-protection.md` for the expected GitHub ruleset.
 ## CI and workflow permissions
 
 Pull-request validation should be read-only. Workflows that also publish artifacts or images should grant write permissions only to the publishing job, and that job must not run for pull-request events.
+
+The lock maintenance workflows are additionally required to remain repository-read-only because `main` is pull-request protected. They can report drift and upload candidate lock artifacts, but they cannot push canonical lock changes or dispatch publication based on an unreviewed generated lock.
 
 New workflows must start read-only. If new write behavior is genuinely required, treat it as an explicit repository-protocol change and obtain repository-owner review.
 

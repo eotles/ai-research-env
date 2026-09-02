@@ -8,7 +8,6 @@ on:
       - scripts/generate-lockfile.sh
       - scripts/compare_conda_locks.py
       - .github/workflows/lockfile-check.yml
-      - .github/workflows/lockfile-update.yml
 
   workflow_dispatch:
 
@@ -28,8 +27,36 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine whether portable lock inputs changed
+        id: lock_inputs
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -Eeuo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]]; then
+            echo "solve=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
+          printf '%s\n' "${changed_files}"
+
+          if grep -Eq \
+            '^(environment\.yml|conda-lock\.yml|scripts/generate-lockfile\.sh|scripts/compare_conda_locks\.py)$' \
+            <<< "${changed_files}"; then
+            echo "solve=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "solve=false" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Configure runtime paths
+        if: steps.lock_inputs.outputs.solve == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -38,12 +65,14 @@ jobs:
             >> "${GITHUB_ENV}"
 
       - name: Set up micromamba
+        if: steps.lock_inputs.outputs.solve == 'true'
         uses: mamba-org/setup-micromamba@v3
         with:
           micromamba-version: "2.8.1-0"
           cache-downloads: true
 
       - name: Install conda-lock
+        if: steps.lock_inputs.outputs.solve == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -55,6 +84,7 @@ jobs:
             "conda-lock=3.0.4"
 
       - name: Generate candidate lock
+        if: steps.lock_inputs.outputs.solve == 'true'
         shell: bash
         env:
           CONDA_LOCK_SUBPROCESS_STDERR_LOG_LEVEL_OVERRIDE: INFO
@@ -64,6 +94,7 @@ jobs:
           bash scripts/generate-lockfile.sh "${CANDIDATE_LOCK}"
 
       - name: Compare canonical portable lock
+        if: steps.lock_inputs.outputs.solve == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -72,10 +103,17 @@ jobs:
             "${CANDIDATE_LOCK}"
 
       - name: Upload candidate lock
-        if: always()
+        if: always() && steps.lock_inputs.outputs.solve == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pr-candidate-conda-lock-${{ github.run_id }}
           path: ${{ runner.temp }}/candidate-conda-lock.yml
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: Report workflow-only validation
+        if: steps.lock_inputs.outputs.solve != 'true'
+        shell: bash
+        run: |
+          echo "No portable dependency inputs changed; fresh dependency solving is not required for this pull request."
+          echo "Workflow syntax and repository protocol are validated by the always-on lint workflow."

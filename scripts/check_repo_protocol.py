@@ -22,6 +22,7 @@ LOCK_PAIRS = {
 
 LOCK_CHECK_REQUIREMENTS = {
     ".github/workflows/lockfile-check.yml": (
+        "id: lock_inputs",
         "scripts/generate-lockfile.sh",
         "scripts/compare_conda_locks.py",
         "conda-lock.yml",
@@ -32,6 +33,11 @@ LOCK_CHECK_REQUIREMENTS = {
         "conda-lock-gpu.yml",
     ),
 }
+
+LOCK_MAINTENANCE_WORKFLOWS = (
+    ".github/workflows/lockfile-update.yml",
+    ".github/workflows/gpu-lockfile-update.yml",
+)
 
 DOCKER_LOCK_REQUIREMENTS = {
     "Dockerfile": "conda-lock.yml",
@@ -150,6 +156,28 @@ def check_static(errors: list[str]) -> None:
                     errors,
                     f"{path} must retain strict lock validation token: {token}",
                 )
+
+    for path in LOCK_MAINTENANCE_WORKFLOWS:
+        full_path = ROOT / path
+        if not full_path.is_file():
+            fail(errors, f"required lock maintenance workflow is missing: {path}")
+            continue
+        text = full_path.read_text()
+        if top_level_permissions_grant_write(text):
+            fail(
+                errors,
+                f"{path} must remain read-only and may not grant workflow-scope write permissions.",
+            )
+        if re.search(r"(?m)^\s*git\s+push(?:\s|$)", text):
+            fail(
+                errors,
+                f"{path} may not push directly to a protected branch; lock updates belong in pull requests.",
+            )
+        if re.search(r"(?m)^\s*gh\s+workflow\s+run(?:\s|$)", text):
+            fail(
+                errors,
+                f"{path} may not dispatch publication workflows after an unreviewed lock update.",
+            )
 
     workflow_lint = ROOT / ".github/workflows/workflow-lint.yml"
     if not workflow_lint.is_file():
