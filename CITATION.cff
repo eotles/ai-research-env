@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use ai-research-env in your work, please cite the software using the citation metadata below."
+title: "ai-research-env: A reproducible research environment for AI and machine learning"
+type: software
+authors:
+  - given-names: Erkin
+    family-names: Ötleş
+repository-code: "https://github.com/eotles/ai-research-env"
+url: "https://github.com/eotles/ai-research-env"
+version: 0.1.0
+date-released: 2026-09-14
+license: MIT
+keywords:
+  - artificial intelligence
+  - machine learning
+  - reproducible research
+  - research computing
+  - Python
+  - CUDA
+  - conda
+  - Docker
