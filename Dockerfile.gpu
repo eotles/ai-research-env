@@ -1,4 +1,4 @@
-FROM mambaorg/micromamba:2.9.0-debian12-slim
+FROM mambaorg/micromamba:2.10.0-debian12-slim
 
 WORKDIR /work
 
